@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	gameserver "github.com/gopher64/gopher64-netplay-server/internal/gameServer"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"golang.org/x/net/websocket"
 )
 
