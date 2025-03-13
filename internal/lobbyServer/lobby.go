@@ -19,7 +19,7 @@ import (
 
 	"github.com/go-logr/logr"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
-	gameserver "github.com/simple64/simple64-netplay-server/internal/gameServer"
+	gameserver "github.com/gopher64/gopher64-netplay-server/internal/gameServer"
 	"golang.org/x/net/websocket"
 )
 
@@ -189,7 +189,7 @@ func (s *LobbyServer) publishDiscord(message string, channel string) {
 		s.Logger.Error(err, "could not create request")
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
-	httpRequest.Header.Set("User-Agent", "simple64Bot (simple64.github.io, 1)")
+	httpRequest.Header.Set("User-Agent", "gopher64Bot (gopher64.github.io, 1)")
 	resp, err := httpClient.Do(httpRequest)
 	if err != nil {
 		s.Logger.Error(err, "could not send request")

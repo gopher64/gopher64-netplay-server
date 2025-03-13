@@ -1,4 +1,4 @@
-module github.com/simple64/simple64-netplay-server
+module github.com/gopher64/gopher64-netplay-server
 
 go 1.23.0
 
