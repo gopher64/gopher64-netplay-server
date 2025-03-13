@@ -1,19 +1,19 @@
-# simple64-netplay-server
+# gopher64-netplay-server
 
 ## Supported emulators
-* [simple64](https://github.com/simple64/simple64)
-* [RMG](https://github.com/Rosalie241/RMG)
 * [gopher64](https://github.com/gopher64/gopher64)
+* [RMG](https://github.com/Rosalie241/RMG)
+* [simple64](https://github.com/simple64/simple64)
 
 ## Container
 
 ```
-podman pull quay.io/simple64/simple64-netplay-server:latest
+podman pull quay.io/gopher64/gopher64-netplay-server:latest
 ```
 
 ## Running
 ```
-./simple64-netplay-server --name "Server Name"
+./gopher64-netplay-server --name "Server Name"
 ```
 ## Running with Podman
 ```
@@ -27,7 +27,7 @@ spec:
   hostNetwork: true
   containers:
     - name: netplay_container
-      image: quay.io/simple64/simple64-netplay-server:latest
+      image: quay.io/gopher64/gopher64-netplay-server:latest
       args:
         - "--name"
         - "My Server"

@@ -23,12 +23,12 @@ jobs:
 
       - name: Run build script
         run: |
-          CGO_ENABLED=0 GOOS=windows go build -a -o simple64-netplay-server.exe .
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -o simple64-netplay-server-arm64 .
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o simple64-netplay-server-amd64 .
+          CGO_ENABLED=0 GOOS=windows go build -a -o gopher64-netplay-server.exe .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -o gopher64-netplay-server-arm64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o gopher64-netplay-server-amd64 .
 
       - name: Upload folder
         uses: actions/upload-artifact@v4
         with:
-          name: simple64-netplay-server
-          path: simple64-netplay-server*
+          name: gopher64-netplay-server
+          path: gopher64-netplay-server*

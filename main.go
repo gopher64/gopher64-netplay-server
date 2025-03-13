@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/go-logr/zapr"
-	lobbyserver "github.com/simple64/simple64-netplay-server/internal/lobbyServer"
+	lobbyserver "github.com/gopher64/gopher64-netplay-server/internal/lobbyServer"
 	"go.uber.org/zap"
 )
 

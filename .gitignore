@@ -20,4 +20,4 @@
 # Go workspace file
 go.work
 
-simple64-netplay-server
+gopher64-netplay-server

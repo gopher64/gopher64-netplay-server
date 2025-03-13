@@ -36,9 +36,9 @@ jobs:
 
       - name: Push main tag
         run: |
-          podman manifest push netplay docker://quay.io/simple64/simple64-netplay-server:${{ github.ref_name }}
+          podman manifest push netplay docker://quay.io/gopher64/gopher64-netplay-server:${{ github.ref_name }}
 
       - name: Push latest tag
         if: ${{ github.event_name == 'release' }}
         run: |
-          podman manifest push netplay docker://quay.io/simple64/simple64-netplay-server:latest
+          podman manifest push netplay docker://quay.io/gopher64/gopher64-netplay-server:latest
