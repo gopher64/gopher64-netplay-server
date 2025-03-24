@@ -132,7 +132,7 @@ func (s *LobbyServer) updatePlayers(g *gameserver.GameServer) {
 		return
 	}
 	var sendMessage SocketMessage
-	sendMessage.PlayerNames = make([]string, 4) //nolint:gomnd,mnd
+	sendMessage.PlayerNames = make([]string, 4)
 	sendMessage.Type = TypeReplyPlayers
 	for i, v := range g.Players {
 		if v.InLobby {
@@ -194,7 +194,7 @@ func (s *LobbyServer) publishDiscord(message string, channel string) {
 	if err != nil {
 		s.Logger.Error(err, "could not send request")
 	} else {
-		resp.Body.Close()
+		resp.Body.Close() //nolint:errcheck
 	}
 }
 
@@ -231,7 +231,7 @@ func (s *LobbyServer) watchGameServer(name string, g *gameserver.GameServer) {
 			g.PlayersMutex.Unlock()
 			s.updatePlayers(g)
 		}
-		time.Sleep(time.Second * 5) //nolint:gomnd,mnd
+		time.Sleep(time.Second * 5)
 	}
 }
 
@@ -250,7 +250,7 @@ func (s *LobbyServer) validateAuth(receivedMessage SocketMessage) bool {
 
 	timeDifference := now.Sub(receivedTime)
 	absTimeDifference := time.Duration(math.Abs(float64(timeDifference)))
-	maxAllowableDifference := 15 * time.Minute //nolint:gomnd,mnd
+	maxAllowableDifference := 15 * time.Minute
 
 	if absTimeDifference > maxAllowableDifference {
 		s.Logger.Error(fmt.Errorf("clock skew"), "bad time in auth request", "serverTime", now, "clientTime", receivedTime, "emulator", receivedMessage.Emulator)
@@ -271,7 +271,7 @@ func (s *LobbyServer) validateAuth(receivedMessage SocketMessage) bool {
 
 func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 	authenticated := false
-	defer ws.Close()
+	defer ws.Close() //nolint:errcheck
 
 	// s.Logger.Info("new WS connection", "address", ws.Request().RemoteAddr)
 
@@ -522,7 +522,7 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 				} else if g.MD5 != receivedMessage.Room.MD5 {
 					accepted = MismatchVersion
 					message = "ROM does not match room ROM"
-				} else if len(g.Players) >= 4 { //nolint:gomnd,mnd
+				} else if len(g.Players) >= 4 {
 					accepted = RoomFull
 					message = "Room is full"
 				} else if g.Running {
@@ -644,9 +644,9 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 							}
 						}
 						if privateNetwork {
-							g.BufferTarget = 1 //nolint:gomnd
+							g.BufferTarget = 1
 						} else {
-							g.BufferTarget = 2 //nolint:gomnd
+							g.BufferTarget = 2
 						}
 					}
 
@@ -693,7 +693,7 @@ func (s *LobbyServer) getOutboundIP(dest *net.UDPAddr) (net.IP, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating udp %s", err.Error())
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 	localAddr, ok := conn.LocalAddr().(*net.UDPAddr)
 	if !ok {
 		return nil, fmt.Errorf("failed to parse address")
@@ -734,11 +734,11 @@ func (s *LobbyServer) runBroadcastServer(broadcastPort int) {
 		s.Logger.Error(err, "could not listen for broadcasts")
 		return
 	}
-	defer broadcastServer.Close()
+	defer broadcastServer.Close() //nolint:errcheck
 
 	s.Logger.Info("listening for broadcasts")
 	for {
-		buf := make([]byte, 1500) //nolint:gomnd,mnd
+		buf := make([]byte, 1500)
 		_, addr, err := broadcastServer.ReadFromUDP(buf)
 		if err != nil {
 			s.Logger.Error(err, "error reading broadcast packet")
@@ -763,7 +763,7 @@ func (s *LobbyServer) RunSocketServer(broadcastPort int) error {
 
 	s.Logger.Info("server running", "address", listenAddress, "version", getVersion(), "platform", runtime.GOOS, "arch", runtime.GOARCH, "goversion", runtime.Version(), "enable-auth", s.EnableAuth)
 
-	err := http.ListenAndServe(listenAddress, nil) //nolint:gosec
+	err := http.ListenAndServe(listenAddress, nil)
 	if err != nil {
 		return fmt.Errorf("error listening on http port %s", err.Error())
 	}

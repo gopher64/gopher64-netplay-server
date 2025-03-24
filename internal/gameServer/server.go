@@ -106,7 +106,7 @@ func (g *GameServer) ManageBuffer() {
 				}
 			}
 		}
-		time.Sleep(time.Second * 5) //nolint:gomnd,mnd
+		time.Sleep(time.Second * 5)
 	}
 }
 
@@ -125,7 +125,7 @@ func (g *GameServer) ManagePlayers() {
 					playersActive = true
 				} else {
 					g.Logger.Info("play disconnected UDP", "player", i, "regID", g.Registrations[i].RegID, "address", g.GameData.PlayerAddresses[i])
-					g.GameData.Status |= (0x1 << (i + 1)) //nolint:gomnd,mnd
+					g.GameData.Status |= (0x1 << (i + 1))
 
 					g.RegistrationsMutex.Lock() // Registrations can be modified by processTCP
 					delete(g.Registrations, i)
