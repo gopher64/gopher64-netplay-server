@@ -410,7 +410,7 @@ func (g *GameServer) watchTCP() {
 			continue
 		}
 		for _, v := range g.Players {
-			if remoteAddr.IP.Equal(net.ParseIP(v.IP)) {
+			if remoteAddr.IP.Equal(v.IP) {
 				validated = true
 			}
 		}

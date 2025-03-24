@@ -184,7 +184,7 @@ func (g *GameServer) watchUDP() {
 
 		validated := false
 		for _, v := range g.Players {
-			if addr.IP.Equal(net.ParseIP(v.IP)) {
+			if addr.IP.Equal(v.IP) {
 				validated = true
 			}
 		}
