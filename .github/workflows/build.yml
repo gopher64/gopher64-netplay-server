@@ -19,7 +19,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          args: --timeout=10m --default all --disable perfsprint,varnamelen,nlreturn,depguard,wsl,nestif,tagliatelle,goerr113,cyclop,lll,funlen,gocritic,gocognit,gocyclo,exhaustruct,maintidx
+          args: --timeout=10m --default all --disable perfsprint,varnamelen,nlreturn,depguard,wsl,nestif,tagliatelle,cyclop,lll,funlen,gocritic,gocognit,gocyclo,exhaustruct,maintidx
 
       - name: Run build script
         run: |
