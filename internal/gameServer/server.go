@@ -12,7 +12,7 @@ import (
 
 type Client struct {
 	Socket  *websocket.Conn
-	IP      string
+	IP      net.IP
 	Number  int
 	InLobby bool
 }

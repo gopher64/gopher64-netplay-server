@@ -377,15 +377,13 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 					g.Players = make(map[string]gameserver.Client)
 					g.Features = receivedMessage.Room.Features
 					g.BufferTarget = receivedMessage.Room.BufferTarget
-					if g.BufferTarget < 1 || g.BufferTarget > 255 {
-						g.BufferTarget = 2 //nolint:gomnd
-					}
+
 					ip, _, err := net.SplitHostPort(ws.Request().RemoteAddr)
 					if err != nil {
 						g.Logger.Error(err, "could not parse IP", "IP", ws.Request().RemoteAddr)
 					}
 					g.Players[receivedMessage.PlayerName] = gameserver.Client{
-						IP:      ip,
+						IP:      net.ParseIP(ip),
 						Number:  0,
 						Socket:  ws,
 						InLobby: true,
@@ -557,7 +555,7 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 					}
 					g.PlayersMutex.Lock() // any player can modify this from their own thread
 					g.Players[receivedMessage.PlayerName] = gameserver.Client{
-						IP:      ip,
+						IP:      net.ParseIP(ip),
 						Socket:  ws,
 						Number:  number,
 						InLobby: true,
@@ -638,9 +636,23 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
 					}
 				} else {
+					if g.BufferTarget == 0 {
+						privateNetwork := true
+						for _, v := range g.Players {
+							if !v.IP.IsPrivate() {
+								privateNetwork = false
+							}
+						}
+						if privateNetwork {
+							g.BufferTarget = 1 //nolint:gomnd
+						} else {
+							g.BufferTarget = 2 //nolint:gomnd
+						}
+					}
+
 					g.Running = true
 					g.StartTime = time.Now()
-					g.Logger.Info("starting game", "time", g.StartTime.Format(time.RFC3339))
+					g.Logger.Info("starting game", "buffer_target", g.BufferTarget, "time", g.StartTime.Format(time.RFC3339))
 					g.NumberOfPlayers = len(g.Players)
 					sendMessage.Accept = Accepted
 					go s.watchGameServer(roomName, g)
