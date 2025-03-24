@@ -50,7 +50,7 @@ const (
 
 // returns true if v is bigger than w (accounting for uint32 wrap around).
 func uintLarger(v uint32, w uint32) bool {
-	return (w - v) > (math.MaxUint32 / 2) //nolint:gomnd,mnd
+	return (w - v) > (math.MaxUint32 / 2)
 }
 
 func (g *GameServer) getPlayerNumberByID(regID uint32) (byte, error) {
@@ -76,7 +76,7 @@ func (g *GameServer) fillInput(playerNumber byte, count uint32) InputData {
 }
 
 func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber byte, spectator bool, sendingPlayerNumber byte) uint32 {
-	buffer := make([]byte, 508) //nolint:gomnd,mnd
+	buffer := make([]byte, 508)
 	var countLag uint32
 	if uintLarger(count, g.GameData.LeadCount) {
 		if !spectator {
@@ -93,7 +93,7 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 	}
 	buffer[1] = playerNumber
 	buffer[2] = g.GameData.Status
-	buffer[3] = uint8(countLag) //nolint:gosec
+	buffer[3] = uint8(countLag)
 	currentByte := 5
 	start := count
 	end := start + g.GameData.BufferSize[sendingPlayerNumber]
@@ -111,7 +111,7 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 	}
 
 	if count > start {
-		buffer[4] = uint8(count - start) //nolint:gosec // number of counts in packet
+		buffer[4] = uint8(count - start) // number of counts in packet
 		_, err := g.UDPListener.WriteToUDP(buffer[0:currentByte], addr)
 		if err != nil {
 			g.Logger.Error(err, "could not send input")
@@ -122,7 +122,8 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 
 func (g *GameServer) processUDP(addr *net.UDPAddr, buf []byte) {
 	playerNumber := buf[1]
-	if buf[0] == KeyInfoClient {
+	switch buf[0] {
+	case KeyInfoClient:
 		g.GameData.PlayerAddresses[playerNumber] = addr
 		count := binary.BigEndian.Uint32(buf[2:])
 
@@ -134,7 +135,7 @@ func (g *GameServer) processUDP(addr *net.UDPAddr, buf []byte) {
 				g.sendUDPInput(count, g.GameData.PlayerAddresses[i], playerNumber, true, NoRegID)
 			}
 		}
-	} else if buf[0] == PlayerInputRequest {
+	case PlayerInputRequest:
 		regID := binary.BigEndian.Uint32(buf[2:])
 		count := binary.BigEndian.Uint32(buf[6:])
 		spectator := buf[10]
@@ -154,7 +155,7 @@ func (g *GameServer) processUDP(addr *net.UDPAddr, buf []byte) {
 		g.GameDataMutex.Unlock()
 
 		g.GameData.CountLag[sendingPlayerNumber] = countLag
-	} else if buf[0] == CP0Info {
+	case CP0Info:
 		if g.GameData.Status&StatusDesync == 0 {
 			viCount := binary.BigEndian.Uint32(buf[1:])
 			syncValue, ok := g.GameData.SyncValues[viCount]
@@ -173,7 +174,7 @@ func (g *GameServer) processUDP(addr *net.UDPAddr, buf []byte) {
 
 func (g *GameServer) watchUDP() {
 	for {
-		buf := make([]byte, 1500) //nolint:gomnd,mnd
+		buf := make([]byte, 1500)
 		_, addr, err := g.UDPListener.ReadFromUDP(buf)
 		if err != nil && !g.isConnClosed(err) {
 			g.Logger.Error(err, "error from UdpListener")
@@ -201,28 +202,28 @@ func (g *GameServer) createUDPServer() error {
 	var err error
 	g.UDPListener, err = net.ListenUDP("udp", &net.UDPAddr{Port: g.Port})
 	if err != nil {
-		return err //nolint:wrapcheck
+		return err
 	}
-	if err := ipv4.NewConn(g.UDPListener).SetTOS(CS4 << 2); err != nil { //nolint:gomnd,mnd
+	if err := ipv4.NewConn(g.UDPListener).SetTOS(CS4 << 2); err != nil {
 		g.Logger.Error(err, "could not set IPv4 DSCP")
 	}
-	if err := ipv6.NewConn(g.UDPListener).SetTrafficClass(CS4 << 2); err != nil { //nolint:gomnd,mnd
+	if err := ipv6.NewConn(g.UDPListener).SetTrafficClass(CS4 << 2); err != nil {
 		g.Logger.Error(err, "could not set IPv6 DSCP")
 	}
 	g.Logger.Info("Created UDP server", "port", g.Port)
 
-	g.GameData.PlayerAddresses = make([]*net.UDPAddr, 4) //nolint:gomnd,mnd
+	g.GameData.PlayerAddresses = make([]*net.UDPAddr, 4)
 	g.GameData.BufferSize = []uint32{3, 3, 3, 3}
 	g.GameData.BufferHealth = []int32{-1, -1, -1, -1}
-	g.GameData.Inputs = make([]*lru.Cache[uint32, InputData], 4) //nolint:gomnd,mnd
+	g.GameData.Inputs = make([]*lru.Cache[uint32, InputData], 4)
 	for i := range 4 {
 		g.GameData.Inputs[i], _ = lru.New[uint32, InputData](InputDataMax)
 	}
-	g.GameData.PendingInput = make([]uint32, 4) //nolint:gomnd,mnd
-	g.GameData.PendingPlugin = make([]byte, 4)  //nolint:gomnd,mnd
+	g.GameData.PendingInput = make([]uint32, 4)
+	g.GameData.PendingPlugin = make([]byte, 4)
 	g.GameData.SyncValues = make(map[uint32][]byte)
-	g.GameData.PlayerAlive = make([]bool, 4) //nolint:gomnd,mnd
-	g.GameData.CountLag = make([]uint32, 4)  //nolint:gomnd,mnd
+	g.GameData.PlayerAlive = make([]bool, 4)
+	g.GameData.CountLag = make([]uint32, 4)
 
 	go g.watchUDP()
 	return nil

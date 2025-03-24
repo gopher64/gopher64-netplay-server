@@ -54,8 +54,8 @@ func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize b
 			}
 		} else {
 			if withSize {
-				size := make([]byte, 4)                                                     //nolint:gomnd,mnd
-				binary.BigEndian.PutUint32(size, uint32(len(g.TCPFiles[tcpData.Filename]))) //nolint:gosec
+				size := make([]byte, 4)
+				binary.BigEndian.PutUint32(size, uint32(len(g.TCPFiles[tcpData.Filename])))
 				_, err := conn.Write(size)
 				if err != nil {
 					g.Logger.Error(err, "could not write size", "address", conn.RemoteAddr().String())
@@ -123,7 +123,7 @@ func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 		}
 	}
 	var i byte
-	registrations := make([]byte, 24) //nolint:gomnd,mnd
+	registrations := make([]byte, 24)
 	current := 0
 	for i = range 4 {
 		_, ok := g.Registrations[i]
@@ -146,10 +146,10 @@ func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 }
 
 func (g *GameServer) processTCP(conn *net.TCPConn) {
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	tcpData := &TCPData{Request: RequestNone}
-	incomingBuffer := make([]byte, 1500) //nolint:gomnd,mnd
+	incomingBuffer := make([]byte, 1500)
 	for {
 		var readDeadline time.Time
 		if tcpData.Buffer.Len() > 0 {
@@ -197,7 +197,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 		}
 
 		if tcpData.Request == RequestSendSave && tcpData.Filename != "" && tcpData.Filesize == 0 { // get file size from sender
-			if tcpData.Buffer.Len() >= 4 { //nolint:gomnd,mnd
+			if tcpData.Buffer.Len() >= 4 {
 				filesizeBytes := make([]byte, 4)
 				_, err = tcpData.Buffer.Read(filesizeBytes)
 				if err != nil {
@@ -272,14 +272,14 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 			}
-			regIDBytes := make([]byte, 4) //nolint:gomnd,mnd
+			regIDBytes := make([]byte, 4)
 			_, err = tcpData.Buffer.Read(regIDBytes)
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 			}
 			regID := binary.BigEndian.Uint32(regIDBytes)
 
-			response := make([]byte, 2) //nolint:gomnd,mnd
+			response := make([]byte, 2)
 			_, ok := g.Registrations[playerNumber]
 			if !ok {
 				if playerNumber > 0 && plugin == 2 { // Only P1 can use mempak
@@ -310,7 +310,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 					response[0] = 0
 				}
 			}
-			response[1] = uint8(g.BufferTarget) //nolint:gosec
+			response[1] = uint8(g.BufferTarget)
 			_, err = conn.Write(response)
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
@@ -324,7 +324,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 		}
 
 		if tcpData.Request == RequestDisconnectNotice && tcpData.Buffer.Len() >= 4 { // disconnect notice
-			regIDBytes := make([]byte, 4) //nolint:gomnd,mnd
+			regIDBytes := make([]byte, 4)
 			_, err = tcpData.Buffer.Read(regIDBytes)
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
@@ -339,7 +339,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 
 						g.GameDataMutex.Lock() // any player can modify this, which would be in a different thread
 						g.GameData.PlayerAlive[i] = false
-						g.GameData.Status |= (0x1 << (i + 1)) //nolint:gomnd,mnd
+						g.GameData.Status |= (0x1 << (i + 1))
 						g.GameDataMutex.Unlock()
 
 						g.RegistrationsMutex.Lock() // any player can modify this, which would be in a different thread
@@ -361,7 +361,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 		}
 
 		if tcpData.Request >= RequestSendCustomStart && tcpData.Request < RequestSendCustomStart+CustomDataOffset && tcpData.Buffer.Len() >= 4 && tcpData.CustomID == 0 { // get custom data (for example, plugin settings)
-			dataSizeBytes := make([]byte, 4) //nolint:gomnd,mnd
+			dataSizeBytes := make([]byte, 4)
 			_, err = tcpData.Buffer.Read(dataSizeBytes)
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
@@ -406,7 +406,7 @@ func (g *GameServer) watchTCP() {
 		remoteAddr, err := net.ResolveTCPAddr(conn.RemoteAddr().Network(), conn.RemoteAddr().String())
 		if err != nil {
 			g.Logger.Error(err, "could not resolve remote IP")
-			conn.Close()
+			conn.Close() //nolint:errcheck
 			continue
 		}
 		for _, v := range g.Players {
@@ -416,7 +416,7 @@ func (g *GameServer) watchTCP() {
 		}
 		if !validated {
 			g.Logger.Error(fmt.Errorf("invalid tcp connection"), "bad IP", "IP", conn.RemoteAddr().String())
-			conn.Close()
+			conn.Close() //nolint:errcheck
 			continue
 		}
 
