@@ -62,12 +62,14 @@ func (g *GameServer) getPlayerNumberByID(regID uint32) (byte, error) {
 	return NoRegID, fmt.Errorf("could not find ID")
 }
 
-func (g *GameServer) fillInput(playerNumber byte, count uint32) {
-	_, inputExists := g.GameData.Inputs[playerNumber].Get(count)
+func (g *GameServer) fillInput(playerNumber byte, count uint32) uint32 {
+	input, inputExists := g.GameData.Inputs[playerNumber].Get(count)
 	if !inputExists {
-		g.GameData.Inputs[playerNumber].Add(count, g.GameData.PendingInput[playerNumber])
+		input = g.GameData.PendingInput[playerNumber]
+		g.GameData.Inputs[playerNumber].Add(count, input)
 		g.GameData.Plugin[playerNumber].Add(count, g.GameData.PendingPlugin[playerNumber])
 	}
+	return input
 }
 
 func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber byte, spectator bool, sendingPlayerNumber byte) uint32 {
@@ -92,17 +94,16 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 	currentByte := 5
 	start := count
 	end := start + g.GameData.BufferSize[sendingPlayerNumber]
-	inputData, ok := g.GameData.Inputs[playerNumber].Get(count) // check if input exists for this count
+	_, ok := g.GameData.Inputs[playerNumber].Get(count) // check if input exists for this count
 	for (currentByte < len(buffer)-9) && ((!spectator && countLag == 0 && uintLarger(end, count)) || ok) {
 		binary.BigEndian.PutUint32(buffer[currentByte:], count)
 		currentByte += 4
-		g.fillInput(playerNumber, count)
-		binary.BigEndian.PutUint32(buffer[currentByte:], inputData)
+		binary.BigEndian.PutUint32(buffer[currentByte:], g.fillInput(playerNumber, count))
 		currentByte += 4
 		buffer[currentByte], _ = g.GameData.Plugin[playerNumber].Get(count)
 		currentByte++
 		count++
-		inputData, ok = g.GameData.Inputs[playerNumber].Get(count) // check if input exists for this count
+		_, ok = g.GameData.Inputs[playerNumber].Get(count) // check if input exists for this count
 	}
 
 	if count > start {
