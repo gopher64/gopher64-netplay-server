@@ -8,6 +8,7 @@ import (
 	"net"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru/v2"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
@@ -17,8 +18,8 @@ type GameData struct {
 	PlayerAddresses []*net.UDPAddr
 	BufferSize      []uint32
 	BufferHealth    []int32
-	Inputs          []map[uint32]uint32
-	Plugin          []map[uint32]byte
+	Inputs          []*lru.Cache[uint32, uint32]
+	Plugin          []*lru.Cache[uint32, byte]
 	PendingInput    []uint32
 	CountLag        []uint32
 	PendingPlugin   []byte
@@ -36,11 +37,11 @@ const (
 )
 
 const (
-	StatusDesync              = 1
-	DisconnectTimeoutS        = 30
-	NoRegID                   = 255
-	InputDataMax       uint32 = 5000
-	CS4                       = 32
+	StatusDesync           = 1
+	DisconnectTimeoutS     = 30
+	NoRegID                = 255
+	InputDataMax       int = 60 * 60 // One minute of input data
+	CS4                    = 32
 )
 
 // returns true if v is bigger than w (accounting for uint32 wrap around).
@@ -61,14 +62,14 @@ func (g *GameServer) getPlayerNumberByID(regID uint32) (byte, error) {
 	return NoRegID, fmt.Errorf("could not find ID")
 }
 
-func (g *GameServer) fillInput(playerNumber byte, count uint32) {
-	_, inputExists := g.GameData.Inputs[playerNumber][count]
-	delete(g.GameData.Inputs[playerNumber], count-InputDataMax) // no need to keep old input data
-	delete(g.GameData.Plugin[playerNumber], count-InputDataMax) // no need to keep old input data
+func (g *GameServer) fillInput(playerNumber byte, count uint32) uint32 {
+	input, inputExists := g.GameData.Inputs[playerNumber].Get(count)
 	if !inputExists {
-		g.GameData.Inputs[playerNumber][count] = g.GameData.PendingInput[playerNumber]
-		g.GameData.Plugin[playerNumber][count] = g.GameData.PendingPlugin[playerNumber]
+		input = g.GameData.PendingInput[playerNumber]
+		g.GameData.Inputs[playerNumber].Add(count, input)
+		g.GameData.Plugin[playerNumber].Add(count, g.GameData.PendingPlugin[playerNumber])
 	}
+	return input
 }
 
 func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber byte, spectator bool, sendingPlayerNumber byte) uint32 {
@@ -93,17 +94,16 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 	currentByte := 5
 	start := count
 	end := start + g.GameData.BufferSize[sendingPlayerNumber]
-	_, ok := g.GameData.Inputs[playerNumber][count] // check if input exists for this count
+	_, ok := g.GameData.Inputs[playerNumber].Get(count) // check if input exists for this count
 	for (currentByte < len(buffer)-9) && ((!spectator && countLag == 0 && uintLarger(end, count)) || ok) {
 		binary.BigEndian.PutUint32(buffer[currentByte:], count)
 		currentByte += 4
-		g.fillInput(playerNumber, count)
-		binary.BigEndian.PutUint32(buffer[currentByte:], g.GameData.Inputs[playerNumber][count])
+		binary.BigEndian.PutUint32(buffer[currentByte:], g.fillInput(playerNumber, count))
 		currentByte += 4
-		buffer[currentByte] = g.GameData.Plugin[playerNumber][count]
+		buffer[currentByte], _ = g.GameData.Plugin[playerNumber].Get(count)
 		currentByte++
 		count++
-		_, ok = g.GameData.Inputs[playerNumber][count] // check if input exists for this count
+		_, ok = g.GameData.Inputs[playerNumber].Get(count) // check if input exists for this count
 	}
 
 	if count > start {
@@ -210,13 +210,13 @@ func (g *GameServer) createUDPServer() error {
 	g.GameData.PlayerAddresses = make([]*net.UDPAddr, 4) //nolint:gomnd,mnd
 	g.GameData.BufferSize = []uint32{3, 3, 3, 3}
 	g.GameData.BufferHealth = []int32{-1, -1, -1, -1}
-	g.GameData.Inputs = make([]map[uint32]uint32, 4) //nolint:gomnd,mnd
+	g.GameData.Inputs = make([]*lru.Cache[uint32, uint32], 4) //nolint:gomnd,mnd
 	for i := range 4 {
-		g.GameData.Inputs[i] = make(map[uint32]uint32)
+		g.GameData.Inputs[i], _ = lru.New[uint32, uint32](InputDataMax)
 	}
-	g.GameData.Plugin = make([]map[uint32]byte, 4) //nolint:gomnd,mnd
+	g.GameData.Plugin = make([]*lru.Cache[uint32, byte], 4) //nolint:gomnd,mnd
 	for i := range 4 {
-		g.GameData.Plugin[i] = make(map[uint32]byte)
+		g.GameData.Plugin[i], _ = lru.New[uint32, byte](InputDataMax)
 	}
 	g.GameData.PendingInput = make([]uint32, 4) //nolint:gomnd,mnd
 	g.GameData.PendingPlugin = make([]byte, 4)  //nolint:gomnd,mnd
