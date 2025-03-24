@@ -40,7 +40,7 @@ const (
 	StatusDesync           = 1
 	DisconnectTimeoutS     = 30
 	NoRegID                = 255
-	InputDataMax       int = 5000
+	InputDataMax       int = 60 * 60 // One minute of input data
 	CS4                    = 32
 )
 
