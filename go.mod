@@ -7,12 +7,12 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	go.uber.org/zap v1.27.0
-	golang.org/x/net v0.38.0
+	golang.org/x/net v0.39.0
 )
 
 require (
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
 )
 
 require (
