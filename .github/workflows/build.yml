@@ -1,5 +1,10 @@
 name: Build project
 
+permissions:
+  contents: read
+  actions: read
+  artifacts: write
+
 on:
   push:
     branches:
