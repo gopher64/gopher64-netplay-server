@@ -86,7 +86,6 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 		countLag = g.GameData.LeadCount - count
 	}
 	if sendingPlayerNumber == NoRegID { // if the incoming packet was KeyInfoClient, the regID isn't included in the packet
-		sendingPlayerNumber = playerNumber
 		buffer[0] = KeyInfoServerGratuitous // client will ignore countLag value in this case
 	} else {
 		buffer[0] = KeyInfoServer
