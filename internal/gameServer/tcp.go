@@ -340,8 +340,6 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 						g.GameDataMutex.Lock() // any player can modify this, which would be in a different thread
 						g.GameData.PlayerAlive[i] = false
 						g.GameData.Status |= (0x1 << (i + 1))
-						g.GameData.BufferHealth[i] = -1
-						g.GameDataMutex.Unlock()
 
 						g.RegistrationsMutex.Lock() // any player can modify this, which would be in a different thread
 						delete(g.Registrations, i)
@@ -355,6 +353,8 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 								g.PlayersMutex.Unlock()
 							}
 						}
+						g.GameData.BufferHealth[i] = -1
+						g.GameDataMutex.Unlock()
 					}
 				}
 			}
