@@ -94,18 +94,28 @@ func (g *GameServer) ManageBuffer() {
 			g.Logger.Info("done managing buffers")
 			return
 		}
-		// Adjust the buffer size for the lead player(s)
+
+		// Find the largest buffer health
+		var bufferHealth int32 = -1
 		for i := range 4 {
 			if g.GameData.BufferHealth[i] != -1 && g.GameData.CountLag[i] == 0 {
-				if g.GameData.BufferHealth[i] > g.BufferTarget && g.GameData.BufferSize[i] > 0 {
-					g.GameData.BufferSize[i]--
-					// g.Logger.Info("reducing buffer size", "player", i, "bufferSize", g.GameData.BufferSize[i])
-				} else if g.GameData.BufferHealth[i] < g.BufferTarget {
-					g.GameData.BufferSize[i]++
-					// g.Logger.Info("increasing buffer size", "player", i, "bufferSize", g.GameData.BufferSize[i])
+				if g.GameData.BufferHealth[i] > bufferHealth {
+					bufferHealth = g.GameData.BufferHealth[i]
 				}
 			}
 		}
+
+		// Adjust the buffer size
+		if bufferHealth != -1 {
+			if bufferHealth > g.BufferTarget && g.GameData.BufferSize > 0 {
+				g.GameData.BufferSize--
+				g.Logger.Info("reduced buffer size", "bufferSize", g.GameData.BufferSize)
+			} else if bufferHealth < g.BufferTarget {
+				g.GameData.BufferSize++
+				g.Logger.Info("increased buffer size", "bufferSize", g.GameData.BufferSize)
+			}
+		}
+
 		time.Sleep(time.Second * 5)
 	}
 }
@@ -121,7 +131,7 @@ func (g *GameServer) ManagePlayers() {
 			_, ok := g.Registrations[i]
 			if ok {
 				if g.GameData.PlayerAlive[i] {
-					g.Logger.Info("player status", "player", i, "regID", g.Registrations[i].RegID, "bufferSize", g.GameData.BufferSize[i], "bufferHealth", g.GameData.BufferHealth[i], "countLag", g.GameData.CountLag[i], "address", g.GameData.PlayerAddresses[i])
+					g.Logger.Info("player status", "player", i, "regID", g.Registrations[i].RegID, "bufferSize", g.GameData.BufferSize, "bufferHealth", g.GameData.BufferHealth[i], "countLag", g.GameData.CountLag[i], "address", g.GameData.PlayerAddresses[i])
 					playersActive = true
 				} else {
 					g.Logger.Info("play disconnected UDP", "player", i, "regID", g.Registrations[i].RegID, "address", g.GameData.PlayerAddresses[i])
@@ -139,6 +149,7 @@ func (g *GameServer) ManagePlayers() {
 							g.PlayersMutex.Unlock()
 						}
 					}
+					g.GameData.BufferHealth[i] = -1
 				}
 			}
 			g.GameData.PlayerAlive[i] = false

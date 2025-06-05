@@ -21,7 +21,7 @@ type InputData struct {
 type GameData struct {
 	SyncValues      map[uint32][]byte
 	PlayerAddresses []*net.UDPAddr
-	BufferSize      []uint32
+	BufferSize      uint32
 	BufferHealth    []int32
 	Inputs          []*lru.Cache[uint32, InputData]
 	PendingInput    []uint32
@@ -86,7 +86,6 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 		countLag = g.GameData.LeadCount - count
 	}
 	if sendingPlayerNumber == NoRegID { // if the incoming packet was KeyInfoClient, the regID isn't included in the packet
-		sendingPlayerNumber = playerNumber
 		buffer[0] = KeyInfoServerGratuitous // client will ignore countLag value in this case
 	} else {
 		buffer[0] = KeyInfoServer
@@ -96,7 +95,7 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 	buffer[3] = uint8(countLag)
 	currentByte := 5
 	start := count
-	end := start + g.GameData.BufferSize[sendingPlayerNumber]
+	end := start + g.GameData.BufferSize
 	_, ok := g.GameData.Inputs[playerNumber].Get(count) // check if input exists for this count
 	for (currentByte < len(buffer)-9) && ((!spectator && countLag == 0 && uintLarger(end, count)) || ok) {
 		binary.BigEndian.PutUint32(buffer[currentByte:], count)
@@ -213,7 +212,7 @@ func (g *GameServer) createUDPServer() error {
 	g.Logger.Info("Created UDP server", "port", g.Port)
 
 	g.GameData.PlayerAddresses = make([]*net.UDPAddr, 4)
-	g.GameData.BufferSize = []uint32{3, 3, 3, 3}
+	g.GameData.BufferSize = 3
 	g.GameData.BufferHealth = []int32{-1, -1, -1, -1}
 	g.GameData.Inputs = make([]*lru.Cache[uint32, InputData], 4)
 	for i := range 4 {
