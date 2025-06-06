@@ -31,7 +31,6 @@ spec:
       args:
         - "--name"
         - "My Server"
-        - "--disable-broadcast"
         - "--baseport"
         - "45000"
 EOF
