@@ -19,7 +19,7 @@ type InputData struct {
 }
 
 type GameData struct {
-	SyncValues      map[uint32][]byte
+	SyncValues      *lru.Cache[uint32, []byte]
 	PlayerAddresses []*net.UDPAddr
 	BufferSize      uint32
 	BufferHealth    []int32
@@ -158,9 +158,9 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 	case CP0Info:
 		if g.GameData.Status&StatusDesync == 0 {
 			viCount := binary.BigEndian.Uint32(g.GameData.recvBuffer[1:])
-			syncValue, ok := g.GameData.SyncValues[viCount]
+			syncValue, ok := g.GameData.SyncValues.Get(viCount)
 			if !ok {
-				g.GameData.SyncValues[viCount] = g.GameData.recvBuffer[5:133]
+				g.GameData.SyncValues.Add(viCount, g.GameData.recvBuffer[5:133])
 			} else if !bytes.Equal(syncValue, g.GameData.recvBuffer[5:133]) {
 				g.GameDataMutex.Lock() // Status can be modified by ManagePlayers in a different thread
 				g.GameData.Status |= StatusDesync
@@ -220,7 +220,7 @@ func (g *GameServer) createUDPServer() error {
 	}
 	g.GameData.PendingInput = make([]uint32, 4)
 	g.GameData.PendingPlugin = make([]byte, 4)
-	g.GameData.SyncValues = make(map[uint32][]byte)
+	g.GameData.SyncValues, _ = lru.New[uint32, []byte](100) // Store up to 100 sync values
 	g.GameData.PlayerAlive = make([]bool, 4)
 	g.GameData.CountLag = make([]uint32, 4)
 	g.GameData.sendBuffer = make([]byte, 508)
