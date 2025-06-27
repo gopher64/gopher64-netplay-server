@@ -157,7 +157,7 @@ func (g *GameServer) ManagePlayers() {
 		g.GameDataMutex.Unlock()
 
 		if !playersActive {
-			g.Logger.Info("no more players, closing room", "numPlayers", g.NumberOfPlayers, "playTime", time.Since(g.StartTime).String())
+			g.Logger.Info("no more players, closing room", "numPlayers", g.NumberOfPlayers, "clientSHA", g.ClientSha, "playTime", time.Since(g.StartTime).String())
 			g.CloseServers()
 			g.Running = false
 			return
