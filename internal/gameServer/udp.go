@@ -160,7 +160,7 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 			viCount := binary.BigEndian.Uint32(g.GameData.recvBuffer[1:])
 			syncValue, ok := g.GameData.SyncValues.Get(viCount)
 			if !ok {
-				g.GameData.SyncValues.Add(viCount, g.GameData.recvBuffer[5:133])
+				g.GameData.SyncValues.Add(viCount, bytes.Clone(g.GameData.recvBuffer[5:133]))
 			} else if !bytes.Equal(syncValue, g.GameData.recvBuffer[5:133]) {
 				g.GameDataMutex.Lock() // Status can be modified by ManagePlayers in a different thread
 				g.GameData.Status |= StatusDesync
