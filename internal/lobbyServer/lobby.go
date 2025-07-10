@@ -243,7 +243,7 @@ func (s *LobbyServer) validateAuth(receivedMessage SocketMessage) error {
 	now := time.Now().UTC()
 	timeAsInt, err := strconv.ParseInt(receivedMessage.AuthTime, 10, 64)
 	if err != nil {
-		return fmt.Errorf("could not parse time")
+		return fmt.Errorf("could not parse time for authentication")
 	}
 	receivedTime := time.UnixMilli(timeAsInt).UTC()
 
@@ -260,14 +260,14 @@ func (s *LobbyServer) validateAuth(receivedMessage SocketMessage) error {
 
 	authCode := os.Getenv(fmt.Sprintf("%s_AUTH", strings.ToUpper(receivedMessage.Emulator)))
 	if authCode == "" {
-		return fmt.Errorf("no auth code found for emulator %s", receivedMessage.Emulator)
+		return fmt.Errorf("no authentication code found for emulator %s", receivedMessage.Emulator)
 	}
 	h.Write([]byte(authCode))
 
 	if receivedMessage.Auth == hex.EncodeToString(h.Sum(nil)) {
 		return nil
 	} else {
-		return fmt.Errorf("bad auth code")
+		return fmt.Errorf("bad authentication code")
 	}
 }
 
