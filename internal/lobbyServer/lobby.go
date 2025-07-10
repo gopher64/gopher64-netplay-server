@@ -235,16 +235,15 @@ func (s *LobbyServer) watchGameServer(name string, g *gameserver.GameServer) {
 	}
 }
 
-func (s *LobbyServer) validateAuth(receivedMessage SocketMessage) bool {
+func (s *LobbyServer) validateAuth(receivedMessage SocketMessage) error {
 	if !s.EnableAuth {
-		return true
+		return nil
 	}
 
 	now := time.Now().UTC()
 	timeAsInt, err := strconv.ParseInt(receivedMessage.AuthTime, 10, 64)
 	if err != nil {
-		s.Logger.Error(err, "could not parse time", "emulator", receivedMessage.Emulator)
-		return false
+		return fmt.Errorf("could not parse time for authentication")
 	}
 	receivedTime := time.UnixMilli(timeAsInt).UTC()
 
@@ -253,8 +252,7 @@ func (s *LobbyServer) validateAuth(receivedMessage SocketMessage) bool {
 	maxAllowableDifference := 15 * time.Minute
 
 	if absTimeDifference > maxAllowableDifference {
-		s.Logger.Error(fmt.Errorf("clock skew"), "bad time in auth request", "serverTime", now, "clientTime", receivedTime, "emulator", receivedMessage.Emulator)
-		return false
+		return fmt.Errorf("clock skew detected, please check your system time")
 	}
 
 	h := sha256.New()
@@ -262,11 +260,15 @@ func (s *LobbyServer) validateAuth(receivedMessage SocketMessage) bool {
 
 	authCode := os.Getenv(fmt.Sprintf("%s_AUTH", strings.ToUpper(receivedMessage.Emulator)))
 	if authCode == "" {
-		return false
+		return fmt.Errorf("no authentication code found for emulator %s", receivedMessage.Emulator)
 	}
 	h.Write([]byte(authCode))
 
-	return receivedMessage.Auth == hex.EncodeToString(h.Sum(nil))
+	if receivedMessage.Auth == hex.EncodeToString(h.Sum(nil)) {
+		return nil
+	} else {
+		return fmt.Errorf("bad authentication code")
+	}
 }
 
 func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
@@ -349,10 +351,10 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 				if err := s.sendData(ws, sendMessage); err != nil {
 					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
 				}
-			} else if !s.validateAuth(receivedMessage) {
+			} else if authErr := s.validateAuth(receivedMessage); authErr != nil {
 				sendMessage.Accept = BadAuth
-				sendMessage.Message = "Bad authentication code"
-				s.Logger.Info("bad auth code", "message", receivedMessage, "address", ws.Request().RemoteAddr)
+				sendMessage.Message = authErr.Error()
+				s.Logger.Info("bad auth code", "authError", authErr.Error(), "message", receivedMessage, "address", ws.Request().RemoteAddr)
 				if err := s.sendData(ws, sendMessage); err != nil {
 					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
 				}
@@ -460,10 +462,10 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 				if err := s.sendData(ws, sendMessage); err != nil {
 					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
 				}
-			} else if !s.validateAuth(receivedMessage) {
+			} else if authErr := s.validateAuth(receivedMessage); authErr != nil {
 				sendMessage.Accept = BadAuth
-				sendMessage.Message = "Bad authentication code"
-				s.Logger.Info("bad auth code", "message", receivedMessage, "address", ws.Request().RemoteAddr)
+				sendMessage.Message = authErr.Error()
+				s.Logger.Info("bad auth code", "authError", authErr.Error(), "message", receivedMessage, "address", ws.Request().RemoteAddr)
 				if err := s.sendData(ws, sendMessage); err != nil {
 					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
 				}
