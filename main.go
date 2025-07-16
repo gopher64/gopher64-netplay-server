@@ -47,6 +47,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *name == "Custom" {
+		logger.Error(fmt.Errorf("bad name"), "server name cannot be 'Custom'")
+		os.Exit(1)
+	}
+
 	if *motd == "" {
 		*motd = DefaultMOTDMessage
 	}
