@@ -50,6 +50,7 @@ type GameServer struct {
 	NeedsUpdatePlayers bool
 	NumberOfPlayers    int
 	BufferTarget       int32
+	QuitChannel        *chan bool
 }
 
 func (g *GameServer) CreateNetworkServers(basePort int, maxGames int, roomName string, gameName string, emulatorName string, logger logr.Logger) int {
@@ -78,6 +79,9 @@ func (g *GameServer) CloseServers() {
 		g.Logger.Error(err, "error closing TcpListener")
 	} else if err == nil {
 		g.Logger.Info("TCP server closed")
+	}
+	if g.QuitChannel != nil {
+		*g.QuitChannel <- true
 	}
 }
 

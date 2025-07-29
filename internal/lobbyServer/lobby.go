@@ -69,6 +69,8 @@ type LobbyServer struct {
 	MaxGames         int
 	DisableBroadcast bool
 	EnableAuth       bool
+	CloseOnFinish    bool
+	quitChannel      chan bool
 }
 
 type RoomData struct {
@@ -371,6 +373,9 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
 					}
 				} else {
+					if s.CloseOnFinish {
+						g.QuitChannel = &s.quitChannel
+					}
 					g.GameName = receivedMessage.Room.GameName
 					g.MD5 = receivedMessage.Room.MD5
 					g.ClientSha = receivedMessage.ClientSha
@@ -756,6 +761,8 @@ func (s *LobbyServer) RunSocketServer(broadcastPort int) error {
 		go s.runBroadcastServer(broadcastPort)
 	}
 
+	s.quitChannel = make(chan bool)
+
 	server := websocket.Server{
 		Handler:   s.wsHandler,
 		Handshake: nil,
@@ -765,10 +772,14 @@ func (s *LobbyServer) RunSocketServer(broadcastPort int) error {
 
 	s.Logger.Info("server running", "address", listenAddress, "version", getVersion(), "platform", runtime.GOOS, "arch", runtime.GOARCH, "goversion", runtime.Version(), "enable-auth", s.EnableAuth)
 
-	err := http.ListenAndServe(listenAddress, nil)
-	if err != nil {
-		return fmt.Errorf("error listening on http port %s", err.Error())
-	}
+	go func() {
+		err := http.ListenAndServe(listenAddress, nil)
+		if err != nil {
+			s.Logger.Error(err, "error listening on http port")
+			s.quitChannel <- true
+		}
+	}()
+	<-s.quitChannel
 	return nil
 }
 
