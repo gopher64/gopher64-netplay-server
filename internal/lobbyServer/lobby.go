@@ -71,6 +71,7 @@ type LobbyServer struct {
 	EnableAuth       bool
 	CloseOnFinish    bool
 	quitChannel      chan bool
+	Timeout          int
 }
 
 type RoomData struct {
@@ -772,6 +773,15 @@ func (s *LobbyServer) RunSocketServer(broadcastPort int) error {
 
 	s.Logger.Info("server running", "address", listenAddress, "version", getVersion(), "platform", runtime.GOOS, "arch", runtime.GOARCH, "goversion", runtime.Version(), "enable-auth", s.EnableAuth)
 
+	if s.Timeout > 0 {
+		go func() {
+			time.Sleep(time.Duration(s.Timeout) * time.Minute)
+			if len(s.GameServers) == 0 {
+				s.Logger.Info("timeout reached, closing server")
+				s.quitChannel <- true
+			}
+		}()
+	}
 	go func() {
 		err := http.ListenAndServe(listenAddress, nil)
 		if err != nil {

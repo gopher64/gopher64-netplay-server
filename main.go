@@ -34,7 +34,8 @@ func main() {
 	motd := flag.String("motd", "", "MOTD message to display to clients")
 	maxGames := flag.Int("max-games", 10, "Maximum number of concurrent games")
 	enableAuth := flag.Bool("enable-auth", false, "Enable client authentication")
-	closeOnFinish := flag.Bool("close-on-finish", false, "Close the server when the last game finishes, implies -max-games=1")
+	closeOnFinish := flag.Bool("close-on-finish", false, "Close the server when the game finishes, implies -max-games=1")
+	timeout := flag.Int("timeout", 0, "Timeout in minutes. Closes the server if no games are running after this time")
 	flag.Parse()
 
 	zapLog, err := newZap(*logPath)
@@ -70,6 +71,7 @@ func main() {
 		MaxGames:         *maxGames,
 		EnableAuth:       *enableAuth,
 		CloseOnFinish:    *closeOnFinish,
+		Timeout:          *timeout,
 	}
 	go s.LogServerStats()
 	if err := s.RunSocketServer(DefaultBasePort); err != nil {
