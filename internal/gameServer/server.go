@@ -116,7 +116,7 @@ func (g *GameServer) ManageBuffer() {
 			}
 		}
 
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 3)
 	}
 }
 
