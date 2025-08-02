@@ -57,6 +57,8 @@ const (
 	TypeReplyMotd          = "reply_motd"
 	TypeRequestVersion     = "request_version"
 	TypeReplyVersion       = "reply_version"
+	TypeRequestPing        = "request_ping"
+	TypeReplyPing          = "reply_ping"
 )
 
 type LobbyServer struct {
@@ -695,6 +697,19 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			if err := s.sendData(ws, sendMessage); err != nil {
 				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 			}
+		} else if receivedMessage.Type == TypeRequestPing {
+			start := time.Now()
+			ws.SetPongHandler(func(appData string) error {
+				elapsed := time.Since(start)
+				var pingReply SocketMessage
+				pingReply.Type = TypeReplyPing
+				pingReply.Message = strconv.FormatInt(elapsed.Milliseconds(), 10)
+				if err := s.sendData(ws, pingReply); err != nil {
+					s.Logger.Error(err, "failed to send message", "message", pingReply, "address", ws.RemoteAddr())
+				}
+				return nil
+			})
+			ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(5*time.Second))
 		} else {
 			s.Logger.Info("not a valid lobby message type", "message", receivedMessage, "address", ws.RemoteAddr())
 		}
