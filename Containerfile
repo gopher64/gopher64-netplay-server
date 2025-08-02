@@ -5,7 +5,7 @@ COPY . .
 RUN go mod download
 RUN CGO_ENABLED=0 go build -a -o gopher64-netplay-server .
 
-FROM registry.access.redhat.com/ubi10/ubi-micro:latest
+FROM registry.access.redhat.com/ubi10/ubi-minimal:latest
 WORKDIR /
 
 COPY --from=builder /workspace/gopher64-netplay-server .
