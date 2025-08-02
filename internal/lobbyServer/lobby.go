@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"net"
 	"net/http"
@@ -19,8 +18,8 @@ import (
 
 	"github.com/go-logr/logr"
 	gameserver "github.com/gopher64/gopher64-netplay-server/internal/gameServer"
+	"github.com/gorilla/websocket"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
-	"golang.org/x/net/websocket"
 )
 
 const (
@@ -58,6 +57,8 @@ const (
 	TypeReplyMotd          = "reply_motd"
 	TypeRequestVersion     = "request_version"
 	TypeReplyVersion       = "reply_version"
+	TypeRequestPing        = "request_ping"
+	TypeReplyPing          = "reply_ping"
 )
 
 type LobbyServer struct {
@@ -104,7 +105,7 @@ const NetplayAPIVersion = 17
 
 func (s *LobbyServer) sendData(ws *websocket.Conn, message SocketMessage) error {
 	// s.Logger.Info("sending message", "message", message, "address", ws.Request().RemoteAddr)
-	err := websocket.JSON.Send(ws, message)
+	err := ws.WriteJSON(message)
 	if err != nil {
 		return fmt.Errorf("error sending data: %s", err.Error())
 	}
@@ -147,7 +148,7 @@ func (s *LobbyServer) updatePlayers(g *gameserver.GameServer) {
 	for _, v := range g.Players {
 		if v.InLobby {
 			if err := s.sendData(v.Socket, sendMessage); err != nil {
-				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.Socket.Request().RemoteAddr)
+				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.Socket.RemoteAddr())
 			}
 		}
 	}
@@ -170,7 +171,7 @@ func (s *LobbyServer) updateRoom(g *gameserver.GameServer, name string) {
 	for _, v := range g.Players {
 		if v.InLobby {
 			if err := s.sendData(v.Socket, sendMessage); err != nil {
-				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.Socket.Request().RemoteAddr)
+				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.Socket.RemoteAddr())
 			}
 		}
 	}
@@ -274,7 +275,14 @@ func (s *LobbyServer) validateAuth(receivedMessage SocketMessage) error {
 	}
 }
 
-func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
+var upgrader = websocket.Upgrader{}
+
+func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		s.Logger.Error(err, "failed to create websocket")
+		return
+	}
 	authenticated := false
 	defer ws.Close() //nolint:errcheck
 
@@ -282,13 +290,13 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 
 	for {
 		var receivedMessage SocketMessage
-		err := websocket.JSON.Receive(ws, &receivedMessage)
+		err := ws.ReadJSON(&receivedMessage)
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if errors.Is(err, err.(*websocket.CloseError)) {
 				for i, v := range s.GameServers {
 					for k, w := range v.Players {
 						if w.Socket == ws {
-							v.Logger.Info("Player has left lobby", "player", k, "address", ws.Request().RemoteAddr)
+							v.Logger.Info("Player has left lobby", "player", k, "address", ws.RemoteAddr())
 
 							v.PlayersMutex.Lock() // any player can modify this, which would be in a different thread
 							if !v.Running {
@@ -313,7 +321,7 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 				// s.Logger.Info("closed WS connection", "address", ws.Request().RemoteAddr)
 				return
 			}
-			s.Logger.Info("could not read WS message", "reason", err.Error(), "address", ws.Request().RemoteAddr)
+			s.Logger.Info("could not read WS message", "reason", err.Error(), "address", ws.RemoteAddr())
 			continue
 		}
 
@@ -328,38 +336,38 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 				sendMessage.Accept = DuplicateName
 				sendMessage.Message = "Room with this name already exists"
 				if err := s.sendData(ws, sendMessage); err != nil {
-					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 				}
 			} else if receivedMessage.NetplayVersion != NetplayAPIVersion {
 				sendMessage.Accept = MismatchVersion
 				sendMessage.Message = "Client and server not at same API version. Please update your emulator"
 				if err := s.sendData(ws, sendMessage); err != nil {
-					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 				}
 			} else if receivedMessage.Room.RoomName == "" {
 				sendMessage.Accept = BadName
 				sendMessage.Message = "Room name cannot be empty"
 				if err := s.sendData(ws, sendMessage); err != nil {
-					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 				}
 			} else if receivedMessage.PlayerName == "" {
 				sendMessage.Accept = BadName
 				sendMessage.Message = "Player name cannot be empty"
 				if err := s.sendData(ws, sendMessage); err != nil {
-					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 				}
 			} else if receivedMessage.Emulator == "" {
 				sendMessage.Accept = BadEmulator
 				sendMessage.Message = "Emulator name cannot be empty"
 				if err := s.sendData(ws, sendMessage); err != nil {
-					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 				}
 			} else if authErr := s.validateAuth(receivedMessage); authErr != nil {
 				sendMessage.Accept = BadAuth
 				sendMessage.Message = authErr.Error()
-				s.Logger.Info("bad auth code", "authError", authErr.Error(), "message", receivedMessage, "address", ws.Request().RemoteAddr)
+				s.Logger.Info("bad auth code", "authError", authErr.Error(), "message", receivedMessage, "address", ws.RemoteAddr())
 				if err := s.sendData(ws, sendMessage); err != nil {
-					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 				}
 			} else {
 				var sendRoom RoomData
@@ -371,7 +379,7 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 					sendMessage.Accept = Other
 					sendMessage.Message = "Failed to create room"
 					if err := s.sendData(ws, sendMessage); err != nil {
-						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 					}
 				} else {
 					if s.CloseOnFinish {
@@ -386,9 +394,9 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 					g.Features = receivedMessage.Room.Features
 					g.BufferTarget = receivedMessage.Room.BufferTarget
 
-					ip, _, err := net.SplitHostPort(ws.Request().RemoteAddr)
+					ip, _, err := net.SplitHostPort(ws.RemoteAddr().String())
 					if err != nil {
-						g.Logger.Error(err, "could not parse IP", "IP", ws.Request().RemoteAddr)
+						g.Logger.Error(err, "could not parse IP", "IP", ws.RemoteAddr())
 					}
 					g.Players[receivedMessage.PlayerName] = gameserver.Client{
 						IP:      net.ParseIP(ip),
@@ -397,7 +405,7 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 						InLobby: true,
 					}
 					s.GameServers[receivedMessage.Room.RoomName] = &g
-					g.Logger.Info("Created new room", "port", g.Port, "creator", receivedMessage.PlayerName, "clientSHA", receivedMessage.ClientSha, "creatorIP", ws.Request().RemoteAddr, "buffer_target", g.BufferTarget, "features", receivedMessage.Room.Features)
+					g.Logger.Info("Created new room", "port", g.Port, "creator", receivedMessage.PlayerName, "clientSHA", receivedMessage.ClientSha, "creatorIP", ws.RemoteAddr(), "buffer_target", g.BufferTarget, "features", receivedMessage.Room.Features)
 					sendMessage.Accept = Accepted
 					sendMessage.Room.RoomName = receivedMessage.Room.RoomName
 					sendMessage.Room.GameName = receivedMessage.Room.GameName
@@ -406,14 +414,14 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 					sendMessage.PlayerName = receivedMessage.PlayerName
 					sendMessage.Room.Features = receivedMessage.Room.Features
 					if err := s.sendData(ws, sendMessage); err != nil {
-						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 					}
 					s.announceDiscord(&g)
 				}
 			}
 		} else if receivedMessage.Type == TypeRequestEditRoom {
 			if !authenticated {
-				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to edit room without being authenticated", "address", ws.Request().RemoteAddr)
+				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to edit room without being authenticated", "address", ws.RemoteAddr())
 				continue
 			}
 
@@ -427,19 +435,19 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 					sendMessage.Accept = BadPlayer
 					sendMessage.Message = "Player must be room creator"
 					if err := s.sendData(ws, sendMessage); err != nil {
-						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 					}
 				} else if g.Running {
 					sendMessage.Accept = BadGameState
 					sendMessage.Message = "Game is already running"
 					if err := s.sendData(ws, sendMessage); err != nil {
-						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 					}
 				} else if receivedMessage.Room.RoomName != roomName {
 					sendMessage.Accept = BadRoomName
 					sendMessage.Message = "Room name must match"
 					if err := s.sendData(ws, sendMessage); err != nil {
-						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 					}
 				} else {
 					g.MD5 = receivedMessage.Room.MD5
@@ -451,7 +459,7 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 				sendMessage.Accept = BadRoomName
 				sendMessage.Message = "Room not found"
 				if err := s.sendData(ws, sendMessage); err != nil {
-					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 				}
 			}
 		} else if receivedMessage.Type == TypeRequestGetRooms {
@@ -460,20 +468,20 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 				sendMessage.Accept = MismatchVersion
 				sendMessage.Message = "Client and server not at same API version. Please update your emulator"
 				if err := s.sendData(ws, sendMessage); err != nil {
-					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 				}
 			} else if receivedMessage.Emulator == "" {
 				sendMessage.Accept = BadEmulator
 				sendMessage.Message = "Emulator name cannot be empty"
 				if err := s.sendData(ws, sendMessage); err != nil {
-					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 				}
 			} else if authErr := s.validateAuth(receivedMessage); authErr != nil {
 				sendMessage.Accept = BadAuth
 				sendMessage.Message = authErr.Error()
-				s.Logger.Info("bad auth code", "authError", authErr.Error(), "message", receivedMessage, "address", ws.Request().RemoteAddr)
+				s.Logger.Info("bad auth code", "authError", authErr.Error(), "message", receivedMessage, "address", ws.RemoteAddr())
 				if err := s.sendData(ws, sendMessage); err != nil {
-					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 				}
 			} else {
 				authenticated = true
@@ -502,12 +510,12 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 				sendMessage.Accept = Accepted
 				sendMessage.Rooms = rooms
 				if err := s.sendData(ws, sendMessage); err != nil {
-					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 				}
 			}
 		} else if receivedMessage.Type == TypeRequestJoinRoom {
 			if !authenticated {
-				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to join room without being authenticated", "address", ws.Request().RemoteAddr)
+				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to join room without being authenticated", "address", ws.RemoteAddr())
 				continue
 			}
 			var duplicateName bool
@@ -557,9 +565,9 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 						}
 					}
 
-					ip, _, err := net.SplitHostPort(ws.Request().RemoteAddr)
+					ip, _, err := net.SplitHostPort(ws.RemoteAddr().String())
 					if err != nil {
-						g.Logger.Error(err, "could not parse IP", "IP", ws.Request().RemoteAddr)
+						g.Logger.Error(err, "could not parse IP", "IP", ws.RemoteAddr())
 					}
 					g.PlayersMutex.Lock() // any player can modify this from their own thread
 					g.Players[receivedMessage.PlayerName] = gameserver.Client{
@@ -570,7 +578,7 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 					}
 					g.PlayersMutex.Unlock()
 
-					g.Logger.Info("new player joining room", "player", receivedMessage.PlayerName, "playerIP", ws.Request().RemoteAddr, "number", number)
+					g.Logger.Info("new player joining room", "player", receivedMessage.PlayerName, "playerIP", ws.RemoteAddr(), "number", number)
 					var sendRoom RoomData
 					sendMessage.Room = &sendRoom
 					sendMessage.Room.RoomName = roomName
@@ -584,27 +592,27 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 			} else {
 				accepted = RoomDeleted
 				message = "room has been deleted"
-				s.Logger.Info("server not found (room deleted)", "message", receivedMessage, "address", ws.Request().RemoteAddr)
+				s.Logger.Info("server not found (room deleted)", "message", receivedMessage, "address", ws.RemoteAddr())
 			}
 			sendMessage.Accept = accepted
 			sendMessage.Message = message
 			if err := s.sendData(ws, sendMessage); err != nil {
-				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 			}
 		} else if receivedMessage.Type == TypeRequestPlayers {
 			if !authenticated {
-				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to request players without being authenticated", "address", ws.Request().RemoteAddr)
+				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to request players without being authenticated", "address", ws.RemoteAddr())
 				continue
 			}
 			_, g := s.findGameServer(receivedMessage.Room.Port)
 			if g != nil {
 				s.updatePlayers(g)
 			} else {
-				s.Logger.Error(fmt.Errorf("could not find game server"), "server not found", "message", receivedMessage, "address", ws.Request().RemoteAddr)
+				s.Logger.Error(fmt.Errorf("could not find game server"), "server not found", "message", receivedMessage, "address", ws.RemoteAddr())
 			}
 		} else if receivedMessage.Type == TypeRequestChatMessage {
 			if !authenticated {
-				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to send a chat message without being authenticated", "address", ws.Request().RemoteAddr)
+				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to send a chat message without being authenticated", "address", ws.RemoteAddr())
 				continue
 			}
 			sendMessage.Type = TypeReplyChatMessage
@@ -614,16 +622,16 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 				for _, v := range g.Players {
 					if v.InLobby {
 						if err := s.sendData(v.Socket, sendMessage); err != nil {
-							s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+							s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 						}
 					}
 				}
 			} else {
-				s.Logger.Error(fmt.Errorf("could not find game server"), "server not found", "message", receivedMessage, "address", ws.Request().RemoteAddr)
+				s.Logger.Error(fmt.Errorf("could not find game server"), "server not found", "message", receivedMessage, "address", ws.RemoteAddr())
 			}
 		} else if receivedMessage.Type == TypeRequestBeginGame {
 			if !authenticated {
-				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to begin game without being authenticated", "address", ws.Request().RemoteAddr)
+				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to begin game without being authenticated", "address", ws.RemoteAddr())
 				continue
 			}
 			sendMessage.Type = TypeReplyBeginGame
@@ -635,13 +643,13 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 					sendMessage.Accept = BadPlayer
 					sendMessage.Message = "Player must be room creator"
 					if err := s.sendData(ws, sendMessage); err != nil {
-						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 					}
 				} else if g.Running {
 					sendMessage.Accept = BadGameState
 					sendMessage.Message = "Game is already running"
 					if err := s.sendData(ws, sendMessage); err != nil {
-						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 					}
 				} else {
 					if g.BufferTarget == 0 {
@@ -666,31 +674,46 @@ func (s *LobbyServer) wsHandler(ws *websocket.Conn) {
 					go s.watchGameServer(roomName, g)
 					for _, v := range g.Players {
 						if err := s.sendData(v.Socket, sendMessage); err != nil {
-							s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+							s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 						}
 					}
 				}
 			} else {
-				s.Logger.Error(fmt.Errorf("could not find game server"), "server not found", "message", receivedMessage, "address", ws.Request().RemoteAddr)
+				s.Logger.Error(fmt.Errorf("could not find game server"), "server not found", "message", receivedMessage, "address", ws.RemoteAddr())
 			}
 		} else if receivedMessage.Type == TypeRequestMotd {
 			if !authenticated {
-				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to request the motd without being authenticated", "address", ws.Request().RemoteAddr)
+				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to request the motd without being authenticated", "address", ws.RemoteAddr())
 				continue
 			}
 			sendMessage.Type = TypeReplyMotd
 			sendMessage.Message = s.Motd
 			if err := s.sendData(ws, sendMessage); err != nil {
-				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 			}
 		} else if receivedMessage.Type == TypeRequestVersion {
 			sendMessage.Type = TypeReplyVersion
 			sendMessage.Message = getVersion()
 			if err := s.sendData(ws, sendMessage); err != nil {
-				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.Request().RemoteAddr)
+				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
+			}
+		} else if receivedMessage.Type == TypeRequestPing {
+			start := time.Now()
+			ws.SetPongHandler(func(appData string) error {
+				elapsed := time.Since(start)
+				var pingReply SocketMessage
+				pingReply.Type = TypeReplyPing
+				pingReply.Message = strconv.FormatInt(elapsed.Milliseconds(), 10)
+				if err := s.sendData(ws, pingReply); err != nil {
+					s.Logger.Error(err, "failed to send message", "message", pingReply, "address", ws.RemoteAddr())
+				}
+				return nil
+			})
+			if err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(5*time.Second)); err != nil {
+				s.Logger.Error(err, "failed to send ping", "address", ws.RemoteAddr())
 			}
 		} else {
-			s.Logger.Info("not a valid lobby message type", "message", receivedMessage, "address", ws.Request().RemoteAddr)
+			s.Logger.Info("not a valid lobby message type", "message", receivedMessage, "address", ws.RemoteAddr())
 		}
 	}
 }
@@ -764,11 +787,7 @@ func (s *LobbyServer) RunSocketServer(broadcastPort int) error {
 
 	s.quitChannel = make(chan bool)
 
-	server := websocket.Server{
-		Handler:   s.wsHandler,
-		Handshake: nil,
-	}
-	http.Handle("/", server)
+	http.HandleFunc("/", s.wsHandler)
 	listenAddress := fmt.Sprintf(":%d", s.BasePort)
 
 	s.Logger.Info("server running", "address", listenAddress, "version", getVersion(), "platform", runtime.GOOS, "arch", runtime.GOARCH, "goversion", runtime.Version(), "enable-auth", s.EnableAuth)

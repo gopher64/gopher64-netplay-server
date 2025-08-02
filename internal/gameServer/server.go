@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 )
 
 type Client struct {
