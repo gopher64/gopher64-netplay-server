@@ -709,7 +709,9 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				return nil
 			})
-			ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(5*time.Second))
+			if err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(5*time.Second)); err != nil {
+				s.Logger.Error(err, "failed to send ping", "address", ws.RemoteAddr())
+			}
 		} else {
 			s.Logger.Info("not a valid lobby message type", "message", receivedMessage, "address", ws.RemoteAddr())
 		}
