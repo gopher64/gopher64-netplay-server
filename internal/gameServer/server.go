@@ -138,7 +138,7 @@ func (g *GameServer) ManagePlayers() {
 					g.Logger.Info("player status", "player", i, "regID", g.Registrations[i].RegID, "bufferSize", g.GameData.BufferSize, "bufferHealth", g.GameData.BufferHealth[i], "countLag", g.GameData.CountLag[i], "address", g.GameData.PlayerAddresses[i])
 					playersActive = true
 				} else {
-					g.Logger.Info("play disconnected UDP", "player", i, "regID", g.Registrations[i].RegID, "address", g.GameData.PlayerAddresses[i])
+					g.Logger.Info("player disconnected UDP", "player", i, "regID", g.Registrations[i].RegID, "address", g.GameData.PlayerAddresses[i])
 					g.GameData.Status |= (0x1 << (i + 1))
 
 					g.RegistrationsMutex.Lock() // Registrations can be modified by processTCP
