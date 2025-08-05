@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -292,11 +291,11 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		var receivedMessage SocketMessage
 		err := ws.ReadJSON(&receivedMessage)
 		if err != nil {
-			if errors.Is(err, err.(*websocket.CloseError)) {
+			if e, ok := err.(*websocket.CloseError); ok {
 				for i, v := range s.GameServers {
 					for k, w := range v.Players {
 						if w.Socket == ws {
-							v.Logger.Info("Player has left lobby", "player", k, "address", ws.RemoteAddr())
+							v.Logger.Info("Player has left lobby", "closeCode", e.Text, "player", k, "address", ws.RemoteAddr())
 
 							v.PlayersMutex.Lock() // any player can modify this, which would be in a different thread
 							if !v.Running {
