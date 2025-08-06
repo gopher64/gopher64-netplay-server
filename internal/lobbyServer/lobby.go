@@ -13,6 +13,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -72,6 +73,7 @@ type LobbyServer struct {
 	CloseOnFinish    bool
 	quitChannel      chan bool
 	Timeout          int
+	SendMutex        sync.Mutex
 }
 
 type RoomData struct {
@@ -104,7 +106,9 @@ const NetplayAPIVersion = 17
 
 func (s *LobbyServer) sendData(ws *websocket.Conn, message SocketMessage) error {
 	// s.Logger.Info("sending message", "message", message, "address", ws.Request().RemoteAddr)
+	s.SendMutex.Lock()
 	err := ws.WriteJSON(message)
+	s.SendMutex.Unlock()
 	if err != nil {
 		return fmt.Errorf("error sending data: %s", err.Error())
 	}
