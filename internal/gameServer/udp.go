@@ -24,9 +24,8 @@ type GameData struct {
 	BufferSize      uint32
 	BufferHealth    []int32
 	Inputs          []*lru.Cache[uint32, InputData]
-	PendingInput    []uint32
+	PendingInputs   []*lru.Cache[uint32, InputData]
 	CountLag        []uint32
-	PendingPlugin   []byte
 	sendBuffer      []byte
 	recvBuffer      []byte
 	PlayerAlive     []bool
@@ -71,7 +70,13 @@ func (g *GameServer) getPlayerNumberByID(regID uint32) (byte, error) {
 func (g *GameServer) fillInput(playerNumber byte, count uint32) InputData {
 	input, inputExists := g.GameData.Inputs[playerNumber].Get(count)
 	if !inputExists {
-		input = InputData{keys: g.GameData.PendingInput[playerNumber], plugin: g.GameData.PendingPlugin[playerNumber]}
+		_, input, inputExists = g.GameData.PendingInputs[playerNumber].RemoveOldest()
+		if !inputExists {
+			input, inputExists = g.GameData.Inputs[playerNumber].Get(count - 1)
+			if !inputExists {
+				g.Logger.Error(fmt.Errorf("no input"), "could not get input", "count", count, "playerNumber", playerNumber)
+			}
+		}
 		g.GameData.Inputs[playerNumber].Add(count, input)
 	}
 	return input
@@ -127,8 +132,10 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 		g.GameData.PlayerAddresses[playerNumber] = addr
 		count := binary.BigEndian.Uint32(g.GameData.recvBuffer[2:])
 
-		g.GameData.PendingInput[playerNumber] = binary.BigEndian.Uint32(g.GameData.recvBuffer[6:])
-		g.GameData.PendingPlugin[playerNumber] = g.GameData.recvBuffer[10]
+		g.GameData.PendingInputs[playerNumber].Add(count, InputData{
+			keys:   binary.BigEndian.Uint32(g.GameData.recvBuffer[6:]),
+			plugin: g.GameData.recvBuffer[10],
+		})
 
 		for i := range 4 {
 			if g.GameData.PlayerAddresses[i] != nil {
@@ -214,12 +221,13 @@ func (g *GameServer) createUDPServer() error {
 	g.GameData.PlayerAddresses = make([]*net.UDPAddr, 4)
 	g.GameData.BufferSize = 3
 	g.GameData.BufferHealth = []int32{-1, -1, -1, -1}
+	g.GameData.PendingInputs = make([]*lru.Cache[uint32, InputData], 4)
 	g.GameData.Inputs = make([]*lru.Cache[uint32, InputData], 4)
 	for i := range 4 {
+		g.GameData.PendingInputs[i], _ = lru.New[uint32, InputData](InputDataMax)
 		g.GameData.Inputs[i], _ = lru.New[uint32, InputData](InputDataMax)
 	}
-	g.GameData.PendingInput = make([]uint32, 4)
-	g.GameData.PendingPlugin = make([]byte, 4)
+
 	g.GameData.SyncValues, _ = lru.New[uint32, []byte](100) // Store up to 100 sync values
 	g.GameData.PlayerAlive = make([]bool, 4)
 	g.GameData.CountLag = make([]uint32, 4)
