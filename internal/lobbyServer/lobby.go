@@ -112,7 +112,6 @@ func (s *LobbyServer) sendData(ws *websocket.Conn, message SocketMessage) error 
 	if err != nil {
 		return fmt.Errorf("error sending data: %s", err.Error())
 	}
-
 	return nil
 }
 
