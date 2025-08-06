@@ -56,14 +56,14 @@ func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize b
 			if withSize {
 				size := make([]byte, 4)
 				binary.BigEndian.PutUint32(size, uint32(len(g.TCPFiles[tcpData.Filename])))
-				_, err := conn.Write(size)
-				if err != nil {
+				n, err := conn.Write(size)
+				if err != nil || n != len(size) {
 					g.Logger.Error(err, "could not write size", "address", conn.RemoteAddr().String())
 				}
 			}
 			if len(g.TCPFiles[tcpData.Filename]) > 0 {
-				_, err := conn.Write(g.TCPFiles[tcpData.Filename])
-				if err != nil {
+				n, err := conn.Write(g.TCPFiles[tcpData.Filename])
+				if err != nil || n != len(g.TCPFiles[tcpData.Filename]) {
 					g.Logger.Error(err, "could not write file", "address", conn.RemoteAddr().String())
 				}
 			}
@@ -84,8 +84,8 @@ func (g *GameServer) tcpSendSettings(conn *net.TCPConn) {
 			return
 		}
 	}
-	_, err := conn.Write(g.TCPSettings)
-	if err != nil {
+	n, err := conn.Write(g.TCPSettings)
+	if err != nil || n != len(g.TCPSettings) {
 		g.Logger.Error(err, "could not write settings", "address", conn.RemoteAddr().String())
 	}
 	// g.Logger.Info("sent settings", "address", conn.RemoteAddr().String())
@@ -105,8 +105,8 @@ func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 				return
 			}
 		} else {
-			_, err := conn.Write(g.CustomData[customID])
-			if err != nil {
+			n, err := conn.Write(g.CustomData[customID])
+			if err != nil || n != len(g.CustomData[customID]) {
 				g.Logger.Error(err, "could not write data", "address", conn.RemoteAddr().String())
 			}
 		}
@@ -139,8 +139,8 @@ func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 		}
 	}
 	// g.Logger.Info("sent registration data", "address", conn.RemoteAddr().String())
-	_, err := conn.Write(registrations)
-	if err != nil {
+	n, err := conn.Write(registrations)
+	if err != nil || n != len(registrations) {
 		g.Logger.Error(err, "failed to send registration data", "address", conn.RemoteAddr().String())
 	}
 }
@@ -311,8 +311,8 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 				}
 			}
 			response[1] = uint8(g.BufferTarget)
-			_, err = conn.Write(response)
-			if err != nil {
+			n, err := conn.Write(response)
+			if err != nil || n != len(response) {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 			}
 			tcpData.Request = RequestNone

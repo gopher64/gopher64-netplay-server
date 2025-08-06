@@ -112,8 +112,8 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 
 	if count > start {
 		g.GameData.sendBuffer[4] = uint8(count - start) // number of counts in packet
-		_, err := g.UDPListener.WriteToUDP(g.GameData.sendBuffer[0:currentByte], addr)
-		if err != nil {
+		n, err := g.UDPListener.WriteToUDP(g.GameData.sendBuffer[0:currentByte], addr)
+		if err != nil || n != len(g.GameData.sendBuffer[0:currentByte]) {
 			g.Logger.Error(err, "could not send input")
 		}
 	}
