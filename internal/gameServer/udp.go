@@ -25,6 +25,7 @@ type GameData struct {
 	BufferHealth    []int32
 	Inputs          []*lru.Cache[uint32, InputData]
 	PendingInputs   []*lru.Cache[uint32, InputData]
+	DupedInput      []uint32
 	CountLag        []uint32
 	sendBuffer      []byte
 	recvBuffer      []byte
@@ -72,9 +73,19 @@ func (g *GameServer) fillInput(playerNumber byte, count uint32) InputData {
 	if !inputExists {
 		_, input, inputExists = g.GameData.PendingInputs[playerNumber].RemoveOldest()
 		if !inputExists {
+			g.GameData.DupedInput[playerNumber] += 1
 			input, inputExists = g.GameData.Inputs[playerNumber].Get(count - 1)
 			if !inputExists {
 				g.Logger.Error(fmt.Errorf("no input"), "could not get input", "count", count, "playerNumber", playerNumber)
+			}
+		} else {
+			for g.GameData.DupedInput[playerNumber] > 0 {
+				_, _, ok := g.GameData.PendingInputs[playerNumber].RemoveOldest()
+				if ok {
+					g.GameData.DupedInput[playerNumber] -= 1
+				} else {
+					break
+				}
 			}
 		}
 		g.GameData.Inputs[playerNumber].Add(count, input)
@@ -222,6 +233,7 @@ func (g *GameServer) createUDPServer() error {
 	g.GameData.BufferSize = 3
 	g.GameData.BufferHealth = []int32{-1, -1, -1, -1}
 	g.GameData.PendingInputs = make([]*lru.Cache[uint32, InputData], 4)
+	g.GameData.DupedInput = make([]uint32, 4)
 	g.GameData.Inputs = make([]*lru.Cache[uint32, InputData], 4)
 	for i := range 4 {
 		g.GameData.PendingInputs[i], _ = lru.New[uint32, InputData](InputDataMax)
