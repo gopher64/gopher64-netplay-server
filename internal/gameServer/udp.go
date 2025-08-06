@@ -78,15 +78,6 @@ func (g *GameServer) fillInput(playerNumber byte, count uint32) InputData {
 			if !inputExists {
 				g.Logger.Error(fmt.Errorf("no input"), "could not get input", "count", count, "playerNumber", playerNumber)
 			}
-		} else {
-			for g.GameData.DupedInput[playerNumber] > 0 {
-				_, _, ok := g.GameData.PendingInputs[playerNumber].RemoveOldest()
-				if ok {
-					g.GameData.DupedInput[playerNumber] -= 1
-				} else {
-					break
-				}
-			}
 		}
 		g.GameData.Inputs[playerNumber].Add(count, input)
 	}
@@ -143,10 +134,14 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 		g.GameData.PlayerAddresses[playerNumber] = addr
 		count := binary.BigEndian.Uint32(g.GameData.recvBuffer[2:])
 
-		g.GameData.PendingInputs[playerNumber].Add(count, InputData{
-			keys:   binary.BigEndian.Uint32(g.GameData.recvBuffer[6:]),
-			plugin: g.GameData.recvBuffer[10],
-		})
+		if g.GameData.DupedInput[playerNumber] > 0 {
+			g.GameData.DupedInput[playerNumber] -= 1
+		} else {
+			g.GameData.PendingInputs[playerNumber].Add(count, InputData{
+				keys:   binary.BigEndian.Uint32(g.GameData.recvBuffer[6:]),
+				plugin: g.GameData.recvBuffer[10],
+			})
+		}
 
 		for i := range 4 {
 			if g.GameData.PlayerAddresses[i] != nil {
