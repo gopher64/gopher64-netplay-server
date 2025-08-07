@@ -147,14 +147,12 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 			g.Logger.Error(err, "could not process request", "regID", regID)
 			return
 		}
-		countLag := g.sendUDPInput(count, addr, playerNumber, spectator != 0, sendingPlayerNumber)
+		g.GameData.CountLag[sendingPlayerNumber] = g.sendUDPInput(count, addr, playerNumber, spectator != 0, sendingPlayerNumber)
 		g.GameData.BufferHealth[sendingPlayerNumber] = int32(g.GameData.recvBuffer[11])
 
 		g.GameDataMutex.Lock() // PlayerAlive can be modified by ManagePlayers in a different thread
 		g.GameData.PlayerAlive[sendingPlayerNumber] = true
 		g.GameDataMutex.Unlock()
-
-		g.GameData.CountLag[sendingPlayerNumber] = countLag
 	case CP0Info:
 		if g.GameData.Status&StatusDesync == 0 {
 			viCount := binary.BigEndian.Uint32(g.GameData.recvBuffer[1:])
