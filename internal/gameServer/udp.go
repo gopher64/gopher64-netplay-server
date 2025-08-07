@@ -22,10 +22,10 @@ type GameData struct {
 	SyncValues      *lru.Cache[uint32, []byte]
 	PlayerAddresses []*net.UDPAddr
 	BufferSize      uint32
-	BufferHealth    []int32
+	BufferHealth    []uint32
+	CountLag        []uint32
 	Inputs          []*lru.Cache[uint32, InputData]
 	PendingInput    []InputData
-	CountLag        []uint32
 	sendBuffer      []byte
 	recvBuffer      []byte
 	PlayerAlive     []bool
@@ -76,6 +76,24 @@ func (g *GameServer) fillInput(playerNumber byte, count uint32) InputData {
 	return input
 }
 
+func (g *GameServer) adjustBufferSize(playerNumber byte) {
+	if g.GameData.CountLag[playerNumber] == 0 {
+		for i := range 4 {
+			if g.GameData.BufferHealth[i] > g.GameData.BufferHealth[playerNumber] {
+				// Only adjust the buffer size for the player with the highest buffer health
+				return
+			}
+		}
+
+		// Allow a +/-1 difference between the buffer health and the target
+		if g.GameData.BufferHealth[playerNumber] > g.BufferTarget+1 && g.GameData.BufferSize > 0 {
+			g.GameData.BufferSize--
+		} else if g.GameData.BufferHealth[playerNumber] < g.BufferTarget-1 || g.GameData.BufferHealth[playerNumber] == 0 {
+			g.GameData.BufferSize++
+		}
+	}
+}
+
 func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber byte, spectator bool, sendingPlayerNumber byte) uint32 {
 	var countLag uint32
 	if uintLarger(count, g.GameData.LeadCount) {
@@ -85,6 +103,7 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 	} else {
 		countLag = g.GameData.LeadCount - count
 	}
+
 	if sendingPlayerNumber == NoRegID { // if the incoming packet was KeyInfoClient, the regID isn't included in the packet
 		g.GameData.sendBuffer[0] = KeyInfoServerGratuitous // client will ignore countLag value in this case
 	} else {
@@ -131,6 +150,8 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 			plugin: g.GameData.recvBuffer[10],
 		}
 
+		g.adjustBufferSize(playerNumber)
+
 		for i := range 4 {
 			if g.GameData.PlayerAddresses[i] != nil {
 				g.sendUDPInput(count, g.GameData.PlayerAddresses[i], playerNumber, true, NoRegID)
@@ -149,7 +170,7 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 			return
 		}
 		g.GameData.CountLag[sendingPlayerNumber] = g.sendUDPInput(count, addr, playerNumber, spectator != 0, sendingPlayerNumber)
-		g.GameData.BufferHealth[sendingPlayerNumber] = int32(g.GameData.recvBuffer[11])
+		g.GameData.BufferHealth[sendingPlayerNumber] = uint32(g.GameData.recvBuffer[11])
 
 		g.GameDataMutex.Lock() // PlayerAlive can be modified by ManagePlayers in a different thread
 		g.GameData.PlayerAlive[sendingPlayerNumber] = true
@@ -212,7 +233,8 @@ func (g *GameServer) createUDPServer() error {
 
 	g.GameData.PlayerAddresses = make([]*net.UDPAddr, 4)
 	g.GameData.BufferSize = 3
-	g.GameData.BufferHealth = []int32{-1, -1, -1, -1}
+	g.GameData.BufferHealth = make([]uint32, 4)
+	g.GameData.CountLag = make([]uint32, 4)
 	g.GameData.Inputs = make([]*lru.Cache[uint32, InputData], 4)
 	for i := range 4 {
 		g.GameData.Inputs[i], _ = lru.New[uint32, InputData](InputDataMax)
@@ -220,7 +242,6 @@ func (g *GameServer) createUDPServer() error {
 	g.GameData.PendingInput = make([]InputData, 4)
 	g.GameData.SyncValues, _ = lru.New[uint32, []byte](100) // Store up to 100 sync values
 	g.GameData.PlayerAlive = make([]bool, 4)
-	g.GameData.CountLag = make([]uint32, 4)
 	g.GameData.sendBuffer = make([]byte, 508)
 	g.GameData.recvBuffer = make([]byte, 1500)
 
