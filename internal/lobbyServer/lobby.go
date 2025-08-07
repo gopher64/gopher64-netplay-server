@@ -84,7 +84,7 @@ type RoomData struct {
 	RoomName     string            `json:"room_name"`
 	MD5          string            `json:"MD5"`
 	Port         int               `json:"port"`
-	BufferTarget int32             `json:"buffer_target,omitempty"`
+	BufferTarget uint32            `json:"buffer_target,omitempty"`
 }
 
 type SocketMessage struct {
@@ -224,7 +224,6 @@ func (s *LobbyServer) announceDiscord(g *gameserver.GameServer) {
 }
 
 func (s *LobbyServer) watchGameServer(name string, g *gameserver.GameServer) {
-	go g.ManageBuffer()
 	go g.ManagePlayers()
 	for {
 		if !g.Running {
