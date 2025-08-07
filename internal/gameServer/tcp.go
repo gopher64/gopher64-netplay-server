@@ -298,7 +298,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 				g.Logger.Info("registered player", "registration", g.Registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.Buffer.Len(), "address", conn.RemoteAddr().String())
 
 				g.GameDataMutex.Lock() // any player can modify this, which would be in a different thread
-				g.GameData.PendingPlugin[playerNumber] = plugin
+				g.GameData.PendingInput[playerNumber] = InputData{0, plugin}
 				g.GameData.PlayerAlive[playerNumber] = true
 				g.GameDataMutex.Unlock()
 			} else {
