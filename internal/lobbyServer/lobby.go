@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -84,7 +85,7 @@ type RoomData struct {
 	RoomName     string            `json:"room_name"`
 	MD5          string            `json:"MD5"`
 	Port         int               `json:"port"`
-	BufferTarget int32             `json:"buffer_target,omitempty"`
+	BufferTarget uint32            `json:"buffer_target,omitempty"`
 }
 
 type SocketMessage struct {
@@ -110,7 +111,9 @@ func (s *LobbyServer) sendData(ws *websocket.Conn, message SocketMessage) error 
 	err := ws.WriteJSON(message)
 	s.SendMutex.Unlock()
 	if err != nil {
-		return fmt.Errorf("error sending data: %s", err.Error())
+		if !errors.Is(err, websocket.ErrCloseSent) {
+			return err
+		}
 	}
 	return nil
 }
