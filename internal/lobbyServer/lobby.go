@@ -84,7 +84,7 @@ type RoomData struct {
 	RoomName     string            `json:"room_name"`
 	MD5          string            `json:"MD5"`
 	Port         int               `json:"port"`
-	BufferTarget int32             `json:"buffer_target,omitempty"`
+	BufferTarget uint32            `json:"buffer_target,omitempty"`
 }
 
 type SocketMessage struct {
@@ -110,7 +110,9 @@ func (s *LobbyServer) sendData(ws *websocket.Conn, message SocketMessage) error 
 	err := ws.WriteJSON(message)
 	s.SendMutex.Unlock()
 	if err != nil {
-		return fmt.Errorf("error sending data: %s", err.Error())
+		if _, ok := err.(*websocket.CloseError); !ok {
+			return err
+		}
 	}
 	return nil
 }
@@ -224,7 +226,6 @@ func (s *LobbyServer) announceDiscord(g *gameserver.GameServer) {
 }
 
 func (s *LobbyServer) watchGameServer(name string, g *gameserver.GameServer) {
-	go g.ManageBuffer()
 	go g.ManagePlayers()
 	for {
 		if !g.Running {
