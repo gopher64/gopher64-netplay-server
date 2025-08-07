@@ -84,10 +84,11 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 		countLag = g.GameData.LeadCount - count
 	}
 	if countLag == 0 && !spectator {
-		if bufferHealth > g.BufferTarget {
-			g.GameData.BufferSize -= min(bufferHealth-g.BufferTarget, g.GameData.BufferSize)
-		} else if bufferHealth < g.BufferTarget {
-			g.GameData.BufferSize += g.BufferTarget - bufferHealth
+		// Allow a +/-1 difference between the buffer health and the target
+		if bufferHealth > g.BufferTarget+1 {
+			g.GameData.BufferSize -= min(bufferHealth-g.BufferTarget-1, g.GameData.BufferSize)
+		} else if bufferHealth < g.BufferTarget-1 || bufferHealth == 0 {
+			g.GameData.BufferSize += g.BufferTarget - bufferHealth - 1
 		}
 	}
 	if sendingPlayerNumber == NoRegID { // if the incoming packet was KeyInfoClient, the regID isn't included in the packet
