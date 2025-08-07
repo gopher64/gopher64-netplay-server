@@ -671,7 +671,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 
 					g.Running = true
 					g.StartTime = time.Now()
-					g.Logger.Info("starting game", "buffer_target", g.BufferTarget, "time", g.StartTime.Format(time.RFC3339))
+					g.Logger.Info("starting game", "buffer_target", g.BufferTarget)
 					g.NumberOfPlayers = len(g.Players)
 					sendMessage.Accept = Accepted
 					go s.watchGameServer(roomName, g)
