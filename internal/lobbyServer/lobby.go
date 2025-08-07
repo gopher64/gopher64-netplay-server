@@ -111,7 +111,7 @@ func (s *LobbyServer) sendData(ws *websocket.Conn, message SocketMessage) error 
 	s.SendMutex.Unlock()
 	if err != nil {
 		if _, ok := err.(*websocket.CloseError); !ok {
-			return fmt.Errorf("error sending data: %s", err.Error())
+			return err
 		}
 	}
 	return nil
