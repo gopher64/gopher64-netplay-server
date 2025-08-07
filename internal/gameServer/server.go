@@ -1,6 +1,7 @@
 package gameserver
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -49,7 +50,7 @@ type GameServer struct {
 	Features           map[string]string
 	NeedsUpdatePlayers bool
 	NumberOfPlayers    int
-	BufferTarget       int32
+	BufferTarget       uint32
 	QuitChannel        *chan bool
 }
 
@@ -92,6 +93,19 @@ func (g *GameServer) isConnClosed(err error) bool {
 	return strings.Contains(err.Error(), "use of closed network connection")
 }
 
+func (g *GameServer) bufferHealthAverage(playerNumber int) (float32, error) {
+	var bufferHealth float32
+	if g.GameData.BufferHealth[playerNumber].Len() > 0 {
+		for _, k := range g.GameData.BufferHealth[playerNumber].Keys() {
+			value, _ := g.GameData.BufferHealth[playerNumber].Peek(k)
+			bufferHealth += float32(value)
+		}
+		return bufferHealth / float32(g.GameData.BufferHealth[playerNumber].Len()), nil
+	} else {
+		return 0, fmt.Errorf("no buffer health data for player %d", playerNumber)
+	}
+}
+
 func (g *GameServer) ManageBuffer() {
 	for {
 		if !g.Running {
@@ -100,27 +114,29 @@ func (g *GameServer) ManageBuffer() {
 		}
 
 		// Find the largest buffer health
-		var bufferHealth int32 = -1
+		var bufferHealth float32
+		var foundPlayer bool
 		for i := range 4 {
-			if g.GameData.BufferHealth[i] != -1 && g.GameData.CountLag[i] == 0 {
-				if g.GameData.BufferHealth[i] > bufferHealth {
-					bufferHealth = g.GameData.BufferHealth[i]
+			if g.GameData.CountLag[i] == 0 {
+				playerBufferHealth, err := g.bufferHealthAverage(i)
+				if err == nil && playerBufferHealth > bufferHealth {
+					bufferHealth = playerBufferHealth
+					foundPlayer = true
 				}
 			}
 		}
 
-		// Adjust the buffer size
-		if bufferHealth != -1 {
-			if bufferHealth > g.BufferTarget && g.GameData.BufferSize > 0 {
+		if foundPlayer {
+			if bufferHealth > float32(g.BufferTarget)+0.5 && g.GameData.BufferSize > 0 {
 				g.GameData.BufferSize--
 				g.Logger.Info("reduced buffer size", "bufferHealth", bufferHealth, "bufferSize", g.GameData.BufferSize)
-			} else if bufferHealth < g.BufferTarget {
+			} else if bufferHealth < float32(g.BufferTarget)-0.5 {
 				g.GameData.BufferSize++
 				g.Logger.Info("increased buffer size", "bufferHealth", bufferHealth, "bufferSize", g.GameData.BufferSize)
 			}
 		}
 
-		time.Sleep(time.Second * 3)
+		time.Sleep(time.Second)
 	}
 }
 
@@ -135,7 +151,8 @@ func (g *GameServer) ManagePlayers() {
 			_, ok := g.Registrations[i]
 			if ok {
 				if g.GameData.PlayerAlive[i] {
-					g.Logger.Info("player status", "player", i, "regID", g.Registrations[i].RegID, "bufferSize", g.GameData.BufferSize, "bufferHealth", g.GameData.BufferHealth[i], "countLag", g.GameData.CountLag[i], "address", g.GameData.PlayerAddresses[i])
+					playerBufferHealth, _ := g.bufferHealthAverage(int(i))
+					g.Logger.Info("player status", "player", i, "regID", g.Registrations[i].RegID, "bufferSize", g.GameData.BufferSize, "bufferHealth", playerBufferHealth, "countLag", g.GameData.CountLag[i], "address", g.GameData.PlayerAddresses[i])
 					playersActive = true
 				} else {
 					g.Logger.Info("player disconnected UDP", "player", i, "regID", g.Registrations[i].RegID, "address", g.GameData.PlayerAddresses[i])
@@ -153,7 +170,7 @@ func (g *GameServer) ManagePlayers() {
 							g.PlayersMutex.Unlock()
 						}
 					}
-					g.GameData.BufferHealth[i] = -1
+					g.GameData.BufferHealth[i].Purge()
 				}
 			}
 			g.GameData.PlayerAlive[i] = false
