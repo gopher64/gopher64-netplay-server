@@ -24,7 +24,7 @@ type GameData struct {
 	BufferSize      uint32
 	BufferHealth    []int32
 	Inputs          []*lru.Cache[uint32, InputData]
-	PendingInputs   []*lru.Cache[time.Time, InputData]
+	PendingInputs   []*lru.Cache[uint32, InputData]
 	CountLag        []uint32
 	sendBuffer      []byte
 	recvBuffer      []byte
@@ -68,19 +68,15 @@ func (g *GameServer) getPlayerNumberByID(regID uint32) (byte, error) {
 }
 
 func (g *GameServer) fillInput(playerNumber byte, count uint32) InputData {
-	var ttl time.Time
 	var input InputData
 	var inputExists bool
 	input, inputExists = g.GameData.Inputs[playerNumber].Get(count)
 	if !inputExists {
-		for time.Since(ttl) > time.Second {
-			ttl, input, inputExists = g.GameData.PendingInputs[playerNumber].RemoveOldest()
+		_, input, inputExists = g.GameData.PendingInputs[playerNumber].RemoveOldest()
+		if !inputExists {
+			input, inputExists = g.GameData.Inputs[playerNumber].Get(count - 1)
 			if !inputExists {
-				input, inputExists = g.GameData.Inputs[playerNumber].Get(count - 1)
-				if !inputExists {
-					g.Logger.Error(fmt.Errorf("no input"), "could not get input", "count", count, "playerNumber", playerNumber)
-				}
-				break
+				g.Logger.Error(fmt.Errorf("no input"), "could not get input", "count", count, "playerNumber", playerNumber)
 			}
 		}
 		g.GameData.Inputs[playerNumber].Add(count, input)
@@ -138,7 +134,7 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 		g.GameData.PlayerAddresses[playerNumber] = addr
 		count := binary.BigEndian.Uint32(g.GameData.recvBuffer[2:])
 
-		g.GameData.PendingInputs[playerNumber].Add(time.Now(), InputData{
+		g.GameData.PendingInputs[playerNumber].Add(count, InputData{
 			keys:   binary.BigEndian.Uint32(g.GameData.recvBuffer[6:]),
 			plugin: g.GameData.recvBuffer[10],
 		})
@@ -227,10 +223,10 @@ func (g *GameServer) createUDPServer() error {
 	g.GameData.PlayerAddresses = make([]*net.UDPAddr, 4)
 	g.GameData.BufferSize = 3
 	g.GameData.BufferHealth = []int32{-1, -1, -1, -1}
-	g.GameData.PendingInputs = make([]*lru.Cache[time.Time, InputData], 4)
+	g.GameData.PendingInputs = make([]*lru.Cache[uint32, InputData], 4)
 	g.GameData.Inputs = make([]*lru.Cache[uint32, InputData], 4)
 	for i := range 4 {
-		g.GameData.PendingInputs[i], _ = lru.New[time.Time, InputData](InputDataMax)
+		g.GameData.PendingInputs[i], _ = lru.New[uint32, InputData](3)
 		g.GameData.Inputs[i], _ = lru.New[uint32, InputData](InputDataMax)
 	}
 
