@@ -134,9 +134,14 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 		g.GameData.PlayerAddresses[playerNumber] = addr
 		count := binary.BigEndian.Uint32(g.GameData.recvBuffer[2:])
 
-		if g.GameData.DupedInput[playerNumber] > 0 && g.GameData.PendingInputs[playerNumber].Len() > 0 {
+		process_input := true
+		if g.GameData.DupedInput[playerNumber] > 0 {
 			g.GameData.DupedInput[playerNumber] -= 1
-		} else {
+			if g.GameData.PendingInputs[playerNumber].Len() > 0 {
+				process_input = false
+			}
+		}
+		if process_input {
 			g.GameData.PendingInputs[playerNumber].Add(count, InputData{
 				keys:   binary.BigEndian.Uint32(g.GameData.recvBuffer[6:]),
 				plugin: g.GameData.recvBuffer[10],
