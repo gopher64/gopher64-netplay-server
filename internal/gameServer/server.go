@@ -94,8 +94,8 @@ func (g *GameServer) isConnClosed(err error) bool {
 }
 
 func (g *GameServer) bufferHealthAverage(playerNumber int) (float32, error) {
-	var bufferHealth float32
 	if g.GameData.BufferHealth[playerNumber].Len() > 0 {
+		var bufferHealth float32
 		for _, k := range g.GameData.BufferHealth[playerNumber].Keys() {
 			value, _ := g.GameData.BufferHealth[playerNumber].Peek(k)
 			bufferHealth += float32(value)
@@ -115,20 +115,22 @@ func (g *GameServer) ManageBuffer() {
 
 		// Find the largest buffer health
 		var bufferHealth float32
-		var foundPlayer bool
+		var activePlayers bool
 		g.GameDataMutex.Lock() // BufferHealth can be modified by processUDP in a different thread
 		for i := range 4 {
 			if g.GameData.CountLag[i] == 0 {
 				playerBufferHealth, err := g.bufferHealthAverage(i)
-				if err == nil && playerBufferHealth > bufferHealth {
+				if err == nil {
+					activePlayers = true
+				}
+				if playerBufferHealth > bufferHealth {
 					bufferHealth = playerBufferHealth
-					foundPlayer = true
 				}
 			}
 		}
 		g.GameDataMutex.Unlock()
 
-		if foundPlayer {
+		if activePlayers {
 			if bufferHealth > float32(g.BufferTarget)+0.5 && g.GameData.BufferSize > 0 {
 				g.GameData.BufferSize--
 				g.Logger.Info("reduced buffer size", "bufferHealth", bufferHealth, "bufferSize", g.GameData.BufferSize)
