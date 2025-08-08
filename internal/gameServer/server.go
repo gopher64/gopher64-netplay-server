@@ -94,8 +94,6 @@ func (g *GameServer) isConnClosed(err error) bool {
 }
 
 func (g *GameServer) bufferHealthAverage(playerNumber int) (float32, error) {
-	g.GameDataMutex.Lock()
-	defer g.GameDataMutex.Unlock()
 	var bufferHealth float32
 	if g.GameData.BufferHealth[playerNumber].Len() > 0 {
 		for _, k := range g.GameData.BufferHealth[playerNumber].Keys() {
@@ -118,6 +116,7 @@ func (g *GameServer) ManageBuffer() {
 		// Find the largest buffer health
 		var bufferHealth float32
 		var foundPlayer bool
+		g.GameDataMutex.Lock() // BufferHealth can be modified by processUDP in a different thread
 		for i := range 4 {
 			if g.GameData.CountLag[i] == 0 {
 				playerBufferHealth, err := g.bufferHealthAverage(i)
@@ -127,6 +126,7 @@ func (g *GameServer) ManageBuffer() {
 				}
 			}
 		}
+		g.GameDataMutex.Unlock()
 
 		if foundPlayer {
 			if bufferHealth > float32(g.BufferTarget)+0.5 && g.GameData.BufferSize > 0 {
