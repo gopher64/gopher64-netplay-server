@@ -110,7 +110,9 @@ func (s *LobbyServer) sendData(ws *websocket.Conn, message SocketMessage) error 
 	err := ws.WriteJSON(message)
 	s.SendMutex.Unlock()
 	if err != nil {
-		return fmt.Errorf("error sending data: %s", err.Error())
+		if _, ok := err.(*websocket.CloseError); !ok {
+			return err
+		}
 	}
 	return nil
 }
