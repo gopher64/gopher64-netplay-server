@@ -85,10 +85,10 @@ func (g *GameServer) adjustBufferSize(playerNumber byte) {
 			}
 		}
 
-		// Allow a +/-1 difference between the buffer health and the target
+		// Allow a +1 difference between the buffer health and the target
 		if g.GameData.BufferHealth[playerNumber] > g.BufferTarget+1 && g.GameData.BufferSize > 0 {
 			g.GameData.BufferSize--
-		} else if g.GameData.BufferHealth[playerNumber] < g.BufferTarget-1 || g.GameData.BufferHealth[playerNumber] == 0 {
+		} else if g.GameData.BufferHealth[playerNumber] < g.BufferTarget {
 			g.GameData.BufferSize++
 		}
 	}
