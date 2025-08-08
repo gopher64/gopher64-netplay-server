@@ -94,6 +94,8 @@ func (g *GameServer) isConnClosed(err error) bool {
 }
 
 func (g *GameServer) bufferHealthAverage(playerNumber int) (float32, error) {
+	g.GameDataMutex.Lock()
+	defer g.GameDataMutex.Unlock()
 	var bufferHealth float32
 	if g.GameData.BufferHealth[playerNumber].Len() > 0 {
 		for _, k := range g.GameData.BufferHealth[playerNumber].Keys() {
