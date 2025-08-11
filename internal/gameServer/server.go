@@ -127,6 +127,7 @@ func (g *GameServer) ManageBuffer() {
 					bufferHealth = playerBufferHealth
 				}
 			}
+			g.GameData.BufferHealth[i].Purge()
 		}
 		g.GameDataMutex.Unlock()
 
@@ -155,8 +156,7 @@ func (g *GameServer) ManagePlayers() {
 			_, ok := g.Registrations[i]
 			if ok {
 				if g.GameData.PlayerAlive[i] {
-					playerBufferHealth, _ := g.bufferHealthAverage(int(i))
-					g.Logger.Info("player status", "player", i, "regID", g.Registrations[i].RegID, "bufferSize", g.GameData.BufferSize, "bufferHealth", playerBufferHealth, "countLag", g.GameData.CountLag[i], "address", g.GameData.PlayerAddresses[i])
+					g.Logger.Info("player status", "player", i, "regID", g.Registrations[i].RegID, "bufferSize", g.GameData.BufferSize, "countLag", g.GameData.CountLag[i], "address", g.GameData.PlayerAddresses[i])
 					playersActive = true
 				} else {
 					g.Logger.Info("player disconnected UDP", "player", i, "regID", g.Registrations[i].RegID, "address", g.GameData.PlayerAddresses[i])
