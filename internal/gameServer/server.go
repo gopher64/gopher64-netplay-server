@@ -119,12 +119,13 @@ func (g *GameServer) ManageBuffer() {
 		g.GameDataMutex.Lock() // BufferHealth can be modified by processUDP in a different thread
 		for i := range 4 {
 			if g.GameData.CountLag[i] == 0 {
-				playerBufferHealth, err := g.bufferHealthAverage(i)
+				var err error
+				g.GameData.BufferHealthAverage[i], err = g.bufferHealthAverage(i)
 				if err == nil {
 					activePlayers = true
 				}
-				if playerBufferHealth > bufferHealth {
-					bufferHealth = playerBufferHealth
+				if g.GameData.BufferHealthAverage[i] > bufferHealth {
+					bufferHealth = g.GameData.BufferHealthAverage[i]
 				}
 			}
 			g.GameData.BufferHealth[i].Purge()
@@ -156,7 +157,7 @@ func (g *GameServer) ManagePlayers() {
 			_, ok := g.Registrations[i]
 			if ok {
 				if g.GameData.PlayerAlive[i] {
-					g.Logger.Info("player status", "player", i, "regID", g.Registrations[i].RegID, "bufferSize", g.GameData.BufferSize, "countLag", g.GameData.CountLag[i], "address", g.GameData.PlayerAddresses[i])
+					g.Logger.Info("player status", "player", i, "regID", g.Registrations[i].RegID, "bufferHealthAverage", g.GameData.BufferHealthAverage[i], "bufferSize", g.GameData.BufferSize, "countLag", g.GameData.CountLag[i], "address", g.GameData.PlayerAddresses[i])
 					playersActive = true
 				} else {
 					g.Logger.Info("player disconnected UDP", "player", i, "regID", g.Registrations[i].RegID, "address", g.GameData.PlayerAddresses[i])
