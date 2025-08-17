@@ -19,18 +19,19 @@ type InputData struct {
 }
 
 type GameData struct {
-	SyncValues      *lru.Cache[uint32, []byte]
-	PlayerAddresses [4]*net.UDPAddr
-	BufferSize      uint32
-	BufferHealth    [4]*lru.Cache[uint32, byte]
-	Inputs          [4]*lru.Cache[uint32, InputData]
-	PendingInput    [4]InputData
-	CountLag        [4]uint32
-	sendBuffer      []byte
-	recvBuffer      []byte
-	PlayerAlive     [4]bool
-	LeadCount       uint32
-	Status          byte
+	SyncValues          *lru.Cache[uint32, []byte]
+	PlayerAddresses     [4]*net.UDPAddr
+	BufferSize          uint32
+	BufferHealth        [4]*lru.Cache[uint32, byte]
+	BufferHealthAverage [4]float32
+	Inputs              [4]*lru.Cache[uint32, InputData]
+	PendingInput        [4]InputData
+	CountLag            [4]uint32
+	sendBuffer          []byte
+	recvBuffer          []byte
+	PlayerAlive         [4]bool
+	LeadCount           uint32
+	Status              byte
 }
 
 const (
@@ -46,7 +47,6 @@ const (
 	DisconnectTimeoutS     = 30
 	NoRegID                = 255
 	InputDataMax       int = 60 * 60 // One minute of input data
-	BufferHealthMax        = 10
 	CS4                    = 32
 )
 
@@ -213,7 +213,7 @@ func (g *GameServer) createUDPServer() error {
 	g.GameData.BufferSize = 3
 	for i := range 4 {
 		g.GameData.Inputs[i], _ = lru.New[uint32, InputData](InputDataMax)
-		g.GameData.BufferHealth[i], _ = lru.New[uint32, byte](BufferHealthMax)
+		g.GameData.BufferHealth[i], _ = lru.New[uint32, byte](InputDataMax)
 	}
 	g.GameData.SyncValues, _ = lru.New[uint32, []byte](100) // Store up to 100 sync values
 	g.GameData.sendBuffer = make([]byte, 508)
