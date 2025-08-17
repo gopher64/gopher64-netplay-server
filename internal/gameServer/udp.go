@@ -20,15 +20,15 @@ type InputData struct {
 
 type GameData struct {
 	SyncValues      *lru.Cache[uint32, []byte]
-	PlayerAddresses []*net.UDPAddr
+	PlayerAddresses [4]*net.UDPAddr
 	BufferSize      uint32
-	BufferHealth    []*lru.Cache[uint32, byte]
-	Inputs          []*lru.Cache[uint32, InputData]
-	PendingInput    []InputData
-	CountLag        []uint32
+	BufferHealth    [4]*lru.Cache[uint32, byte]
+	Inputs          [4]*lru.Cache[uint32, InputData]
+	PendingInput    [4]InputData
+	CountLag        [4]uint32
 	sendBuffer      []byte
 	recvBuffer      []byte
-	PlayerAlive     []bool
+	PlayerAlive     [4]bool
 	LeadCount       uint32
 	Status          byte
 }
@@ -210,18 +210,12 @@ func (g *GameServer) createUDPServer() error {
 	}
 	g.Logger.Info("Created UDP server", "port", g.Port)
 
-	g.GameData.PlayerAddresses = make([]*net.UDPAddr, 4)
 	g.GameData.BufferSize = 3
-	g.GameData.Inputs = make([]*lru.Cache[uint32, InputData], 4)
-	g.GameData.BufferHealth = make([]*lru.Cache[uint32, byte], 4)
 	for i := range 4 {
 		g.GameData.Inputs[i], _ = lru.New[uint32, InputData](InputDataMax)
 		g.GameData.BufferHealth[i], _ = lru.New[uint32, byte](BufferHealthMax)
 	}
-	g.GameData.PendingInput = make([]InputData, 4)
 	g.GameData.SyncValues, _ = lru.New[uint32, []byte](100) // Store up to 100 sync values
-	g.GameData.PlayerAlive = make([]bool, 4)
-	g.GameData.CountLag = make([]uint32, 4)
 	g.GameData.sendBuffer = make([]byte, 508)
 	g.GameData.recvBuffer = make([]byte, 1500)
 
