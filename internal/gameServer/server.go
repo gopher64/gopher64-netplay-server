@@ -116,6 +116,7 @@ func (g *GameServer) ManageBuffer() {
 		// Find the largest buffer health
 		var bufferHealth float32
 		var activePlayers bool
+		var leadPlayer int
 		g.GameDataMutex.Lock() // BufferHealth can be modified by processUDP in a different thread
 		for i := range 4 {
 			if g.GameData.CountLag[i] == 0 {
@@ -126,6 +127,7 @@ func (g *GameServer) ManageBuffer() {
 				}
 				if g.GameData.BufferHealthAverage[i] > bufferHealth {
 					bufferHealth = g.GameData.BufferHealthAverage[i]
+					leadPlayer = i + 1
 				}
 			}
 			g.GameData.BufferHealth[i].Purge()
@@ -135,10 +137,10 @@ func (g *GameServer) ManageBuffer() {
 		if activePlayers {
 			if bufferHealth > float32(g.BufferTarget)+0.5 && g.GameData.BufferSize > 0 {
 				g.GameData.BufferSize--
-				g.Logger.Info("reduced buffer size", "bufferHealth", bufferHealth, "bufferSize", g.GameData.BufferSize)
+				g.Logger.Info("reduced buffer size", "bufferHealth", bufferHealth, "bufferSize", g.GameData.BufferSize, "leadPlayer", leadPlayer)
 			} else if bufferHealth < float32(g.BufferTarget)-0.5 {
 				g.GameData.BufferSize++
-				g.Logger.Info("increased buffer size", "bufferHealth", bufferHealth, "bufferSize", g.GameData.BufferSize)
+				g.Logger.Info("increased buffer size", "bufferHealth", bufferHealth, "bufferSize", g.GameData.BufferSize, "leadPlayer", leadPlayer)
 			}
 		}
 
