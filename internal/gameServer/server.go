@@ -93,18 +93,16 @@ func (g *GameServer) isConnClosed(err error) bool {
 	return strings.Contains(err.Error(), "use of closed network connection")
 }
 
-func (g *GameServer) lowestBufferHealth(playerNumber int) (byte, error) {
+func (g *GameServer) averageBufferHealth(playerNumber int) (float32, error) {
 	defer g.gameData.bufferHealth[playerNumber].Purge()
 
 	if g.gameData.bufferHealth[playerNumber].Len() > 0 {
-		bufferHealth := byte(255) // Start with the maximum possible value
+		var total float32
 		for _, k := range g.gameData.bufferHealth[playerNumber].Keys() {
 			value, _ := g.gameData.bufferHealth[playerNumber].Peek(k)
-			if value < bufferHealth {
-				bufferHealth = value
-			}
+			total += float32(value)
 		}
-		return bufferHealth, nil
+		return total / float32(g.gameData.bufferHealth[playerNumber].Len()), nil
 	} else {
 		return 0, fmt.Errorf("no buffer health data for player %d", playerNumber)
 	}
@@ -118,18 +116,18 @@ func (g *GameServer) ManageBuffer() {
 		}
 
 		// Find the largest buffer health
-		var bufferHealth byte
+		var bufferHealth float32
 		var activePlayers bool
 		var leadPlayer int
 		g.gameDataMutex.Lock() // BufferHealth can be modified by processUDP in a different thread
 		for i := range 4 {
 			var err error
-			g.gameData.lowestBufferHealth[i], err = g.lowestBufferHealth(i)
+			g.gameData.averageBufferHealth[i], err = g.averageBufferHealth(i)
 			if err == nil && g.gameData.countLag[i] == 0 {
 				activePlayers = true
 
-				if g.gameData.lowestBufferHealth[i] > bufferHealth {
-					bufferHealth = g.gameData.lowestBufferHealth[i]
+				if g.gameData.averageBufferHealth[i] > bufferHealth {
+					bufferHealth = g.gameData.averageBufferHealth[i]
 					leadPlayer = i + 1
 				}
 			}
@@ -137,10 +135,10 @@ func (g *GameServer) ManageBuffer() {
 		g.gameDataMutex.Unlock()
 
 		if activePlayers {
-			if bufferHealth > g.BufferTarget && g.gameData.bufferSize > 0 {
+			if bufferHealth > float32(g.BufferTarget)+0.75 && g.gameData.bufferSize > 0 {
 				g.gameData.bufferSize--
 				g.Logger.Info("reduced buffer size", "bufferHealth", bufferHealth, "bufferSize", g.gameData.bufferSize, "leadPlayer", leadPlayer)
-			} else if bufferHealth < g.BufferTarget {
+			} else if bufferHealth < float32(g.BufferTarget)-0.75 {
 				g.gameData.bufferSize++
 				g.Logger.Info("increased buffer size", "bufferHealth", bufferHealth, "bufferSize", g.gameData.bufferSize, "leadPlayer", leadPlayer)
 			}
@@ -161,7 +159,7 @@ func (g *GameServer) ManagePlayers() {
 			_, ok := g.registrations[i]
 			if ok {
 				if g.gameData.playerAlive[i] {
-					g.Logger.Info("player status", "player", i, "regID", g.registrations[i].regID, "bufferHealth", g.gameData.lowestBufferHealth[i], "bufferSize", g.gameData.bufferSize, "countLag", g.gameData.countLag[i], "address", g.gameData.playerAddresses[i])
+					g.Logger.Info("player status", "player", i, "regID", g.registrations[i].regID, "bufferHealth", g.gameData.averageBufferHealth[i], "bufferSize", g.gameData.bufferSize, "countLag", g.gameData.countLag[i], "address", g.gameData.playerAddresses[i])
 					playersActive = true
 				} else {
 					g.Logger.Info("player disconnected UDP", "player", i, "regID", g.registrations[i].regID, "address", g.gameData.playerAddresses[i])

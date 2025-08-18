@@ -19,19 +19,19 @@ type InputData struct {
 }
 
 type GameData struct {
-	syncValues         *lru.Cache[uint32, []byte]
-	playerAddresses    [4]*net.UDPAddr
-	bufferSize         uint32
-	lowestBufferHealth [4]byte
-	bufferHealth       [4]*lru.Cache[uint32, byte]
-	inputs             [4]*lru.Cache[uint32, InputData]
-	pendingInput       [4]InputData
-	countLag           [4]uint32
-	sendBuffer         []byte
-	recvBuffer         []byte
-	playerAlive        [4]bool
-	leadCount          uint32
-	status             byte
+	syncValues          *lru.Cache[uint32, []byte]
+	playerAddresses     [4]*net.UDPAddr
+	bufferSize          uint32
+	averageBufferHealth [4]float32
+	bufferHealth        [4]*lru.Cache[uint32, byte]
+	inputs              [4]*lru.Cache[uint32, InputData]
+	pendingInput        [4]InputData
+	countLag            [4]uint32
+	sendBuffer          []byte
+	recvBuffer          []byte
+	playerAlive         [4]bool
+	leadCount           uint32
+	status              byte
 }
 
 const (
