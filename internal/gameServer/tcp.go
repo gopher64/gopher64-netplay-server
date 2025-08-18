@@ -12,12 +12,12 @@ import (
 )
 
 type TCPData struct {
-	Filename       string
-	Buffer         bytes.Buffer
-	Filesize       uint32
-	Request        byte
-	CustomID       byte
-	CustomDatasize uint32
+	filename       string
+	buffer         bytes.Buffer
+	filesize       uint32
+	request        byte
+	customID       byte
+	customDatasize uint32
 }
 
 const (
@@ -43,9 +43,9 @@ func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize b
 	startTime := time.Now()
 	var ok bool
 	for !ok {
-		g.TCPMutex.Lock()
-		_, ok = g.TCPFiles[tcpData.Filename]
-		g.TCPMutex.Unlock()
+		g.tcpMutex.Lock()
+		_, ok = g.tcpFiles[tcpData.filename]
+		g.tcpMutex.Unlock()
 		if !ok {
 			time.Sleep(time.Millisecond)
 			if time.Since(startTime) > TCPTimeout {
@@ -55,36 +55,36 @@ func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize b
 		} else {
 			if withSize {
 				size := make([]byte, 4)
-				binary.BigEndian.PutUint32(size, uint32(len(g.TCPFiles[tcpData.Filename])))
+				binary.BigEndian.PutUint32(size, uint32(len(g.tcpFiles[tcpData.filename])))
 				_, err := conn.Write(size)
 				if err != nil {
 					g.Logger.Error(err, "could not write size", "address", conn.RemoteAddr().String())
 				}
 			}
-			if len(g.TCPFiles[tcpData.Filename]) > 0 {
-				_, err := conn.Write(g.TCPFiles[tcpData.Filename])
+			if len(g.tcpFiles[tcpData.filename]) > 0 {
+				_, err := conn.Write(g.tcpFiles[tcpData.filename])
 				if err != nil {
 					g.Logger.Error(err, "could not write file", "address", conn.RemoteAddr().String())
 				}
 			}
 
-			// g.Logger.Info("sent save file", "filename", tcpData.Filename, "filesize", tcpData.Filesize, "address", conn.RemoteAddr().String())
-			tcpData.Filename = ""
-			tcpData.Filesize = 0
+			// g.Logger.Info("sent save file", "filename", tcpData.filename, "filesize", tcpData.filesize, "address", conn.RemoteAddr().String())
+			tcpData.filename = ""
+			tcpData.filesize = 0
 		}
 	}
 }
 
 func (g *GameServer) tcpSendSettings(conn *net.TCPConn) {
 	startTime := time.Now()
-	for !g.HasSettings {
+	for !g.hasSettings {
 		time.Sleep(time.Millisecond)
 		if time.Since(startTime) > TCPTimeout {
 			g.Logger.Info("TCP connection timed out in tcpSendSettings")
 			return
 		}
 	}
-	_, err := conn.Write(g.TCPSettings)
+	_, err := conn.Write(g.tcpSettings)
 	if err != nil {
 		g.Logger.Error(err, "could not write settings", "address", conn.RemoteAddr().String())
 	}
@@ -95,9 +95,9 @@ func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 	startTime := time.Now()
 	var ok bool
 	for !ok {
-		g.TCPMutex.Lock()
-		_, ok = g.CustomData[customID]
-		g.TCPMutex.Unlock()
+		g.tcpMutex.Lock()
+		_, ok = g.customData[customID]
+		g.tcpMutex.Unlock()
 		if !ok {
 			time.Sleep(time.Millisecond)
 			if time.Since(startTime) > TCPTimeout {
@@ -105,7 +105,7 @@ func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 				return
 			}
 		} else {
-			_, err := conn.Write(g.CustomData[customID])
+			_, err := conn.Write(g.customData[customID])
 			if err != nil {
 				g.Logger.Error(err, "could not write data", "address", conn.RemoteAddr().String())
 			}
@@ -115,7 +115,7 @@ func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 
 func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 	startTime := time.Now()
-	for len(g.Players) != len(g.Registrations) {
+	for len(g.Players) != len(g.registrations) {
 		time.Sleep(time.Millisecond)
 		if time.Since(startTime) > TCPTimeout {
 			g.Logger.Info("TCP connection timed out in tcpSendReg")
@@ -126,13 +126,13 @@ func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 	registrations := make([]byte, 24)
 	current := 0
 	for i = range 4 {
-		_, ok := g.Registrations[i]
+		_, ok := g.registrations[i]
 		if ok {
-			binary.BigEndian.PutUint32(registrations[current:], g.Registrations[i].RegID)
+			binary.BigEndian.PutUint32(registrations[current:], g.registrations[i].regID)
 			current += 4
-			registrations[current] = g.Registrations[i].Plugin
+			registrations[current] = g.registrations[i].plugin
 			current++
-			registrations[current] = g.Registrations[i].Raw
+			registrations[current] = g.registrations[i].raw
 			current++
 		} else {
 			current += 6
@@ -148,11 +148,11 @@ func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 func (g *GameServer) processTCP(conn *net.TCPConn) {
 	defer conn.Close() //nolint:errcheck
 
-	tcpData := &TCPData{Request: RequestNone}
+	tcpData := &TCPData{request: RequestNone}
 	incomingBuffer := make([]byte, 1500)
 	for {
 		var readDeadline time.Time
-		if tcpData.Buffer.Len() > 0 {
+		if tcpData.buffer.Len() > 0 {
 			// if there is pending data in the buffer, get to it quickly
 			readDeadline = time.Now().Add(time.Millisecond)
 		} else {
@@ -172,12 +172,12 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 			continue
 		}
 		if length > 0 {
-			tcpData.Buffer.Write(incomingBuffer[:length])
+			tcpData.buffer.Write(incomingBuffer[:length])
 		}
 
-		if tcpData.Request == RequestNone { // find the request type
-			if tcpData.Buffer.Len() > 0 {
-				tcpData.Request, err = tcpData.Buffer.ReadByte()
+		if tcpData.request == RequestNone { // find the request type
+			if tcpData.buffer.Len() > 0 {
+				tcpData.request, err = tcpData.buffer.ReadByte()
 				if err != nil {
 					g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 				}
@@ -186,127 +186,127 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 			}
 		}
 
-		if (tcpData.Request == RequestSendSave || tcpData.Request == RequestReceiveSave || tcpData.Request == RequestReceiveSaveWithSize) && tcpData.Filename == "" { // get file name
-			if bytes.IndexByte(tcpData.Buffer.Bytes(), 0) != -1 {
-				filenameBytes, err := tcpData.Buffer.ReadBytes(0)
+		if (tcpData.request == RequestSendSave || tcpData.request == RequestReceiveSave || tcpData.request == RequestReceiveSaveWithSize) && tcpData.filename == "" { // get file name
+			if bytes.IndexByte(tcpData.buffer.Bytes(), 0) != -1 {
+				filenameBytes, err := tcpData.buffer.ReadBytes(0)
 				if err != nil {
 					g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 				}
-				tcpData.Filename = string(filenameBytes[:len(filenameBytes)-1])
+				tcpData.filename = string(filenameBytes[:len(filenameBytes)-1])
 			}
 		}
 
-		if tcpData.Request == RequestSendSave && tcpData.Filename != "" && tcpData.Filesize == 0 { // get file size from sender
-			if tcpData.Buffer.Len() >= 4 {
+		if tcpData.request == RequestSendSave && tcpData.filename != "" && tcpData.filesize == 0 { // get file size from sender
+			if tcpData.buffer.Len() >= 4 {
 				filesizeBytes := make([]byte, 4)
-				_, err = tcpData.Buffer.Read(filesizeBytes)
+				_, err = tcpData.buffer.Read(filesizeBytes)
 				if err != nil {
 					g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 				}
-				tcpData.Filesize = binary.BigEndian.Uint32(filesizeBytes)
+				tcpData.filesize = binary.BigEndian.Uint32(filesizeBytes)
 
-				if tcpData.Filesize == 0 {
-					g.TCPMutex.Lock()
-					g.TCPFiles[tcpData.Filename] = make([]byte, tcpData.Filesize)
-					g.TCPMutex.Unlock()
-					tcpData.Filename = ""
-					tcpData.Filesize = 0
-					tcpData.Request = RequestNone
+				if tcpData.filesize == 0 {
+					g.tcpMutex.Lock()
+					g.tcpFiles[tcpData.filename] = make([]byte, tcpData.filesize)
+					g.tcpMutex.Unlock()
+					tcpData.filename = ""
+					tcpData.filesize = 0
+					tcpData.request = RequestNone
 				}
 			}
 		}
 
-		if tcpData.Request == RequestSendSave && tcpData.Filename != "" && tcpData.Filesize != 0 { // read in file from sender
-			if tcpData.Buffer.Len() >= int(tcpData.Filesize) {
-				g.TCPMutex.Lock()
-				g.TCPFiles[tcpData.Filename] = make([]byte, tcpData.Filesize)
-				_, err = tcpData.Buffer.Read(g.TCPFiles[tcpData.Filename])
-				g.TCPMutex.Unlock()
+		if tcpData.request == RequestSendSave && tcpData.filename != "" && tcpData.filesize != 0 { // read in file from sender
+			if tcpData.buffer.Len() >= int(tcpData.filesize) {
+				g.tcpMutex.Lock()
+				g.tcpFiles[tcpData.filename] = make([]byte, tcpData.filesize)
+				_, err = tcpData.buffer.Read(g.tcpFiles[tcpData.filename])
+				g.tcpMutex.Unlock()
 				if err != nil {
 					g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 				}
-				g.Logger.Info("received save file", "filename", tcpData.Filename, "filesize", tcpData.Filesize, "address", conn.RemoteAddr().String())
-				tcpData.Filename = ""
-				tcpData.Filesize = 0
-				tcpData.Request = RequestNone
+				g.Logger.Info("received save file", "filename", tcpData.filename, "filesize", tcpData.filesize, "address", conn.RemoteAddr().String())
+				tcpData.filename = ""
+				tcpData.filesize = 0
+				tcpData.request = RequestNone
 			}
 		}
 
-		if tcpData.Request == RequestReceiveSave && tcpData.Filename != "" { // send requested file
+		if tcpData.request == RequestReceiveSave && tcpData.filename != "" { // send requested file
 			go g.tcpSendFile(tcpData, conn, false)
-			tcpData.Request = RequestNone
+			tcpData.request = RequestNone
 		}
 
-		if tcpData.Request == RequestReceiveSaveWithSize && tcpData.Filename != "" { // send requested file
+		if tcpData.request == RequestReceiveSaveWithSize && tcpData.filename != "" { // send requested file
 			go g.tcpSendFile(tcpData, conn, true)
-			tcpData.Request = RequestNone
+			tcpData.request = RequestNone
 		}
 
-		if tcpData.Request == RequestSendSettings { // get settings from P1
-			if tcpData.Buffer.Len() >= SettingsSize {
-				_, err = tcpData.Buffer.Read(g.TCPSettings)
+		if tcpData.request == RequestSendSettings { // get settings from P1
+			if tcpData.buffer.Len() >= SettingsSize {
+				_, err = tcpData.buffer.Read(g.tcpSettings)
 				if err != nil {
 					g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 				}
-				// g.Logger.Info("read settings via TCP", "bufferLeft", tcpData.Buffer.Len(), "address", conn.RemoteAddr().String())
-				g.HasSettings = true
-				tcpData.Request = RequestNone
+				// g.Logger.Info("read settings via TCP", "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
+				g.hasSettings = true
+				tcpData.request = RequestNone
 			}
 		}
 
-		if tcpData.Request == RequestReceiveSettings { // send settings to P2-4
+		if tcpData.request == RequestReceiveSettings { // send settings to P2-4
 			go g.tcpSendSettings(conn)
-			tcpData.Request = RequestNone
+			tcpData.request = RequestNone
 		}
 
-		if tcpData.Request == RequestRegisterPlayer && tcpData.Buffer.Len() >= 7 { // register player
-			playerNumber, err := tcpData.Buffer.ReadByte()
+		if tcpData.request == RequestRegisterPlayer && tcpData.buffer.Len() >= 7 { // register player
+			playerNumber, err := tcpData.buffer.ReadByte()
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 			}
-			plugin, err := tcpData.Buffer.ReadByte()
+			plugin, err := tcpData.buffer.ReadByte()
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 			}
-			raw, err := tcpData.Buffer.ReadByte()
+			raw, err := tcpData.buffer.ReadByte()
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 			}
 			regIDBytes := make([]byte, 4)
-			_, err = tcpData.Buffer.Read(regIDBytes)
+			_, err = tcpData.buffer.Read(regIDBytes)
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 			}
 			regID := binary.BigEndian.Uint32(regIDBytes)
 
 			response := make([]byte, 2)
-			_, ok := g.Registrations[playerNumber]
+			_, ok := g.registrations[playerNumber]
 			if !ok {
 				if playerNumber > 0 && plugin == 2 { // Only P1 can use mempak
 					plugin = 1
 				}
 
-				g.RegistrationsMutex.Lock() // any player can modify this, which would be in a different thread
-				g.Registrations[playerNumber] = &Registration{
-					RegID:  regID,
-					Plugin: plugin,
-					Raw:    raw,
+				g.registrationsMutex.Lock() // any player can modify this, which would be in a different thread
+				g.registrations[playerNumber] = &Registration{
+					regID:  regID,
+					plugin: plugin,
+					raw:    raw,
 				}
-				g.RegistrationsMutex.Unlock()
+				g.registrationsMutex.Unlock()
 
 				response[0] = 1
-				g.Logger.Info("registered player", "registration", g.Registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.Buffer.Len(), "address", conn.RemoteAddr().String())
+				g.Logger.Info("registered player", "registration", g.registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 
-				g.GameDataMutex.Lock() // any player can modify this, which would be in a different thread
-				g.GameData.PendingInput[playerNumber] = InputData{0, plugin}
-				g.GameData.PlayerAlive[playerNumber] = true
-				g.GameDataMutex.Unlock()
+				g.gameDataMutex.Lock() // any player can modify this, which would be in a different thread
+				g.gameData.pendingInput[playerNumber] = InputData{0, plugin}
+				g.gameData.playerAlive[playerNumber] = true
+				g.gameDataMutex.Unlock()
 			} else {
-				if g.Registrations[playerNumber].RegID == regID {
-					g.Logger.Error(fmt.Errorf("re-registration"), "player already registered", "registration", g.Registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.Buffer.Len(), "address", conn.RemoteAddr().String())
+				if g.registrations[playerNumber].regID == regID {
+					g.Logger.Error(fmt.Errorf("re-registration"), "player already registered", "registration", g.registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 					response[0] = 1
 				} else {
-					g.Logger.Error(fmt.Errorf("registration failure"), "could not register player", "registration", g.Registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.Buffer.Len(), "address", conn.RemoteAddr().String())
+					g.Logger.Error(fmt.Errorf("registration failure"), "could not register player", "registration", g.registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 					response[0] = 0
 				}
 			}
@@ -315,35 +315,35 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 			}
-			tcpData.Request = RequestNone
+			tcpData.request = RequestNone
 		}
 
-		if tcpData.Request == RequestGetRegistration { // send registration
+		if tcpData.request == RequestGetRegistration { // send registration
 			go g.tcpSendReg(conn)
-			tcpData.Request = RequestNone
+			tcpData.request = RequestNone
 		}
 
-		if tcpData.Request == RequestDisconnectNotice && tcpData.Buffer.Len() >= 4 { // disconnect notice
+		if tcpData.request == RequestDisconnectNotice && tcpData.buffer.Len() >= 4 { // disconnect notice
 			regIDBytes := make([]byte, 4)
-			_, err = tcpData.Buffer.Read(regIDBytes)
+			_, err = tcpData.buffer.Read(regIDBytes)
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 			}
 			regID := binary.BigEndian.Uint32(regIDBytes)
 			var i byte
 			for i = range 4 {
-				v, ok := g.Registrations[i]
+				v, ok := g.registrations[i]
 				if ok {
-					if v.RegID == regID {
+					if v.regID == regID {
 						g.Logger.Info("player disconnected TCP", "regID", regID, "player", i, "address", conn.RemoteAddr().String())
 
-						g.GameDataMutex.Lock() // any player can modify this, which would be in a different thread
-						g.GameData.PlayerAlive[i] = false
-						g.GameData.Status |= (0x1 << (i + 1))
+						g.gameDataMutex.Lock() // any player can modify this, which would be in a different thread
+						g.gameData.playerAlive[i] = false
+						g.gameData.status |= (0x1 << (i + 1))
 
-						g.RegistrationsMutex.Lock() // any player can modify this, which would be in a different thread
-						delete(g.Registrations, i)
-						g.RegistrationsMutex.Unlock()
+						g.registrationsMutex.Lock() // any player can modify this, which would be in a different thread
+						delete(g.registrations, i)
+						g.registrationsMutex.Unlock()
 
 						for k, v := range g.Players {
 							if v.Number == int(i) {
@@ -353,49 +353,49 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 								g.PlayersMutex.Unlock()
 							}
 						}
-						g.GameData.BufferHealth[i].Purge()
-						g.GameDataMutex.Unlock()
+						g.gameData.bufferHealth[i].Purge()
+						g.gameDataMutex.Unlock()
 					}
 				}
 			}
-			tcpData.Request = RequestNone
+			tcpData.request = RequestNone
 		}
 
-		if tcpData.Request >= RequestSendCustomStart && tcpData.Request < RequestSendCustomStart+CustomDataOffset && tcpData.Buffer.Len() >= 4 && tcpData.CustomID == 0 { // get custom data (for example, plugin settings)
+		if tcpData.request >= RequestSendCustomStart && tcpData.request < RequestSendCustomStart+CustomDataOffset && tcpData.buffer.Len() >= 4 && tcpData.customID == 0 { // get custom data (for example, plugin settings)
 			dataSizeBytes := make([]byte, 4)
-			_, err = tcpData.Buffer.Read(dataSizeBytes)
+			_, err = tcpData.buffer.Read(dataSizeBytes)
 			if err != nil {
 				g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 			}
-			tcpData.CustomID = tcpData.Request
-			tcpData.CustomDatasize = binary.BigEndian.Uint32(dataSizeBytes)
+			tcpData.customID = tcpData.request
+			tcpData.customDatasize = binary.BigEndian.Uint32(dataSizeBytes)
 		}
 
-		if tcpData.Request >= RequestSendCustomStart && tcpData.Request < RequestSendCustomStart+CustomDataOffset && tcpData.CustomID != 0 { // read in custom data from sender
-			if tcpData.Buffer.Len() >= int(tcpData.CustomDatasize) {
-				g.TCPMutex.Lock()
-				g.CustomData[tcpData.CustomID] = make([]byte, tcpData.CustomDatasize)
-				_, err = tcpData.Buffer.Read(g.CustomData[tcpData.CustomID])
-				g.TCPMutex.Unlock()
+		if tcpData.request >= RequestSendCustomStart && tcpData.request < RequestSendCustomStart+CustomDataOffset && tcpData.customID != 0 { // read in custom data from sender
+			if tcpData.buffer.Len() >= int(tcpData.customDatasize) {
+				g.tcpMutex.Lock()
+				g.customData[tcpData.customID] = make([]byte, tcpData.customDatasize)
+				_, err = tcpData.buffer.Read(g.customData[tcpData.customID])
+				g.tcpMutex.Unlock()
 				if err != nil {
 					g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 				}
-				tcpData.CustomID = 0
-				tcpData.CustomDatasize = 0
-				tcpData.Request = RequestNone
+				tcpData.customID = 0
+				tcpData.customDatasize = 0
+				tcpData.request = RequestNone
 			}
 		}
 
-		if tcpData.Request >= RequestSendCustomStart+CustomDataOffset && tcpData.Request < RequestSendCustomStart+CustomDataOffset+CustomDataOffset { // send custom data (for example, plugin settings)
-			go g.tcpSendCustom(conn, tcpData.Request-CustomDataOffset)
-			tcpData.Request = RequestNone
+		if tcpData.request >= RequestSendCustomStart+CustomDataOffset && tcpData.request < RequestSendCustomStart+CustomDataOffset+CustomDataOffset { // send custom data (for example, plugin settings)
+			go g.tcpSendCustom(conn, tcpData.request-CustomDataOffset)
+			tcpData.request = RequestNone
 		}
 	}
 }
 
 func (g *GameServer) watchTCP() {
 	for {
-		conn, err := g.TCPListener.AcceptTCP()
+		conn, err := g.tcpListener.AcceptTCP()
 		if err != nil && !g.isConnClosed(err) {
 			g.Logger.Error(err, "error from TcpListener")
 			continue
@@ -429,14 +429,14 @@ func (g *GameServer) watchTCP() {
 func (g *GameServer) createTCPServer(basePort int, maxGames int) int {
 	var err error
 	for i := 1; i <= maxGames; i++ {
-		g.TCPListener, err = net.ListenTCP("tcp", &net.TCPAddr{Port: basePort + i})
+		g.tcpListener, err = net.ListenTCP("tcp", &net.TCPAddr{Port: basePort + i})
 		if err == nil {
 			g.Port = basePort + i
 			g.Logger.Info("Created TCP server", "port", g.Port)
-			g.TCPFiles = make(map[string][]byte)
-			g.CustomData = make(map[byte][]byte)
-			g.TCPSettings = make([]byte, SettingsSize)
-			g.Registrations = map[byte]*Registration{}
+			g.tcpFiles = make(map[string][]byte)
+			g.customData = make(map[byte][]byte)
+			g.tcpSettings = make([]byte, SettingsSize)
+			g.registrations = map[byte]*Registration{}
 			go g.watchTCP()
 			return g.Port
 		}

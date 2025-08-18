@@ -19,19 +19,19 @@ type InputData struct {
 }
 
 type GameData struct {
-	SyncValues          *lru.Cache[uint32, []byte]
-	PlayerAddresses     [4]*net.UDPAddr
-	BufferSize          uint32
-	BufferHealth        [4]*lru.Cache[uint32, byte]
-	BufferHealthAverage [4]float32
-	Inputs              [4]*lru.Cache[uint32, InputData]
-	PendingInput        [4]InputData
-	CountLag            [4]uint32
-	sendBuffer          []byte
-	recvBuffer          []byte
-	PlayerAlive         [4]bool
-	LeadCount           uint32
-	Status              byte
+	syncValues         *lru.Cache[uint32, []byte]
+	playerAddresses    [4]*net.UDPAddr
+	bufferSize         uint32
+	lowestBufferHealth [4]byte
+	bufferHealth       [4]*lru.Cache[uint32, byte]
+	inputs             [4]*lru.Cache[uint32, InputData]
+	pendingInput       [4]InputData
+	countLag           [4]uint32
+	sendBuffer         []byte
+	recvBuffer         []byte
+	playerAlive        [4]bool
+	leadCount          uint32
+	status             byte
 }
 
 const (
@@ -58,9 +58,9 @@ func uintLarger(v uint32, w uint32) bool {
 func (g *GameServer) getPlayerNumberByID(regID uint32) (byte, error) {
 	var i byte
 	for i = range 4 {
-		v, ok := g.Registrations[i]
+		v, ok := g.registrations[i]
 		if ok {
-			if v.RegID == regID {
+			if v.regID == regID {
 				return i, nil
 			}
 		}
@@ -69,50 +69,50 @@ func (g *GameServer) getPlayerNumberByID(regID uint32) (byte, error) {
 }
 
 func (g *GameServer) fillInput(playerNumber byte, count uint32) InputData {
-	input, inputExists := g.GameData.Inputs[playerNumber].Get(count)
+	input, inputExists := g.gameData.inputs[playerNumber].Get(count)
 	if !inputExists {
-		input = g.GameData.PendingInput[playerNumber]
-		g.GameData.Inputs[playerNumber].Add(count, input)
+		input = g.gameData.pendingInput[playerNumber]
+		g.gameData.inputs[playerNumber].Add(count, input)
 	}
 	return input
 }
 
 func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber byte, spectator bool, sendingPlayerNumber byte) uint32 {
 	var countLag uint32
-	if uintLarger(count, g.GameData.LeadCount) {
+	if uintLarger(count, g.gameData.leadCount) {
 		if !spectator {
-			g.Logger.Error(fmt.Errorf("bad count lag"), "count is larger than LeadCount", "count", count, "LeadCount", g.GameData.LeadCount, "playerNumber", playerNumber)
+			g.Logger.Error(fmt.Errorf("bad count lag"), "count is larger than LeadCount", "count", count, "LeadCount", g.gameData.leadCount, "playerNumber", playerNumber)
 		}
 	} else {
-		countLag = g.GameData.LeadCount - count
+		countLag = g.gameData.leadCount - count
 	}
 	if sendingPlayerNumber == NoRegID { // if the incoming packet was KeyInfoClient, the regID isn't included in the packet
-		g.GameData.sendBuffer[0] = KeyInfoServerGratuitous // client will ignore countLag value in this case
+		g.gameData.sendBuffer[0] = KeyInfoServerGratuitous // client will ignore countLag value in this case
 	} else {
-		g.GameData.sendBuffer[0] = KeyInfoServer
+		g.gameData.sendBuffer[0] = KeyInfoServer
 	}
-	g.GameData.sendBuffer[1] = playerNumber
-	g.GameData.sendBuffer[2] = g.GameData.Status
-	g.GameData.sendBuffer[3] = uint8(countLag)
+	g.gameData.sendBuffer[1] = playerNumber
+	g.gameData.sendBuffer[2] = g.gameData.status
+	g.gameData.sendBuffer[3] = uint8(countLag)
 	currentByte := 5
 	start := count
-	end := start + g.GameData.BufferSize
-	_, ok := g.GameData.Inputs[playerNumber].Get(count) // check if input exists for this count
-	for (currentByte < len(g.GameData.sendBuffer)-9) && ((!spectator && countLag == 0 && uintLarger(end, count)) || ok) {
-		binary.BigEndian.PutUint32(g.GameData.sendBuffer[currentByte:], count)
+	end := start + g.gameData.bufferSize
+	_, ok := g.gameData.inputs[playerNumber].Get(count) // check if input exists for this count
+	for (currentByte < len(g.gameData.sendBuffer)-9) && ((!spectator && countLag == 0 && uintLarger(end, count)) || ok) {
+		binary.BigEndian.PutUint32(g.gameData.sendBuffer[currentByte:], count)
 		currentByte += 4
 		input := g.fillInput(playerNumber, count)
-		binary.BigEndian.PutUint32(g.GameData.sendBuffer[currentByte:], input.keys)
+		binary.BigEndian.PutUint32(g.gameData.sendBuffer[currentByte:], input.keys)
 		currentByte += 4
-		g.GameData.sendBuffer[currentByte] = input.plugin
+		g.gameData.sendBuffer[currentByte] = input.plugin
 		currentByte++
 		count++
-		_, ok = g.GameData.Inputs[playerNumber].Get(count) // check if input exists for this count
+		_, ok = g.gameData.inputs[playerNumber].Get(count) // check if input exists for this count
 	}
 
 	if count > start {
-		g.GameData.sendBuffer[4] = uint8(count - start) // number of counts in packet
-		_, err := g.UDPListener.WriteToUDP(g.GameData.sendBuffer[0:currentByte], addr)
+		g.gameData.sendBuffer[4] = uint8(count - start) // number of counts in packet
+		_, err := g.udpListener.WriteToUDP(g.gameData.sendBuffer[0:currentByte], addr)
 		if err != nil {
 			g.Logger.Error(err, "could not send input")
 		}
@@ -121,49 +121,49 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 }
 
 func (g *GameServer) processUDP(addr *net.UDPAddr) {
-	playerNumber := g.GameData.recvBuffer[1]
-	switch g.GameData.recvBuffer[0] {
+	playerNumber := g.gameData.recvBuffer[1]
+	switch g.gameData.recvBuffer[0] {
 	case KeyInfoClient:
-		g.GameData.PlayerAddresses[playerNumber] = addr
-		count := binary.BigEndian.Uint32(g.GameData.recvBuffer[2:])
+		g.gameData.playerAddresses[playerNumber] = addr
+		count := binary.BigEndian.Uint32(g.gameData.recvBuffer[2:])
 
-		g.GameData.PendingInput[playerNumber] = InputData{
-			keys:   binary.BigEndian.Uint32(g.GameData.recvBuffer[6:]),
-			plugin: g.GameData.recvBuffer[10],
+		g.gameData.pendingInput[playerNumber] = InputData{
+			keys:   binary.BigEndian.Uint32(g.gameData.recvBuffer[6:]),
+			plugin: g.gameData.recvBuffer[10],
 		}
 
 		for i := range 4 {
-			if g.GameData.PlayerAddresses[i] != nil {
-				g.sendUDPInput(count, g.GameData.PlayerAddresses[i], playerNumber, true, NoRegID)
+			if g.gameData.playerAddresses[i] != nil {
+				g.sendUDPInput(count, g.gameData.playerAddresses[i], playerNumber, true, NoRegID)
 			}
 		}
 	case PlayerInputRequest:
-		regID := binary.BigEndian.Uint32(g.GameData.recvBuffer[2:])
-		count := binary.BigEndian.Uint32(g.GameData.recvBuffer[6:])
-		spectator := g.GameData.recvBuffer[10]
-		if uintLarger(count, g.GameData.LeadCount) && spectator == 0 {
-			g.GameData.LeadCount = count
+		regID := binary.BigEndian.Uint32(g.gameData.recvBuffer[2:])
+		count := binary.BigEndian.Uint32(g.gameData.recvBuffer[6:])
+		spectator := g.gameData.recvBuffer[10]
+		if uintLarger(count, g.gameData.leadCount) && spectator == 0 {
+			g.gameData.leadCount = count
 		}
 		sendingPlayerNumber, err := g.getPlayerNumberByID(regID)
 		if err != nil {
 			g.Logger.Error(err, "could not process request", "regID", regID)
 			return
 		}
-		g.GameData.CountLag[sendingPlayerNumber] = g.sendUDPInput(count, addr, playerNumber, spectator != 0, sendingPlayerNumber)
-		g.GameDataMutex.Lock() // PlayerAlive and BufferHealth can be modified in different threads
-		g.GameData.BufferHealth[sendingPlayerNumber].Add(count, g.GameData.recvBuffer[11])
-		g.GameData.PlayerAlive[sendingPlayerNumber] = true
-		g.GameDataMutex.Unlock()
+		g.gameData.countLag[sendingPlayerNumber] = g.sendUDPInput(count, addr, playerNumber, spectator != 0, sendingPlayerNumber)
+		g.gameDataMutex.Lock() // PlayerAlive and BufferHealth can be modified in different threads
+		g.gameData.bufferHealth[sendingPlayerNumber].Add(count, g.gameData.recvBuffer[11])
+		g.gameData.playerAlive[sendingPlayerNumber] = true
+		g.gameDataMutex.Unlock()
 	case CP0Info:
-		if g.GameData.Status&StatusDesync == 0 {
-			viCount := binary.BigEndian.Uint32(g.GameData.recvBuffer[1:])
-			syncValue, ok := g.GameData.SyncValues.Get(viCount)
+		if g.gameData.status&StatusDesync == 0 {
+			viCount := binary.BigEndian.Uint32(g.gameData.recvBuffer[1:])
+			syncValue, ok := g.gameData.syncValues.Get(viCount)
 			if !ok {
-				g.GameData.SyncValues.Add(viCount, bytes.Clone(g.GameData.recvBuffer[5:133]))
-			} else if !bytes.Equal(syncValue, g.GameData.recvBuffer[5:133]) {
-				g.GameDataMutex.Lock() // Status can be modified by ManagePlayers in a different thread
-				g.GameData.Status |= StatusDesync
-				g.GameDataMutex.Unlock()
+				g.gameData.syncValues.Add(viCount, bytes.Clone(g.gameData.recvBuffer[5:133]))
+			} else if !bytes.Equal(syncValue, g.gameData.recvBuffer[5:133]) {
+				g.gameDataMutex.Lock() // Status can be modified by ManagePlayers in a different thread
+				g.gameData.status |= StatusDesync
+				g.gameDataMutex.Unlock()
 
 				g.Logger.Error(fmt.Errorf("desync"), "game has desynced", "numPlayers", g.NumberOfPlayers, "clientSHA", g.ClientSha, "playTime", time.Since(g.StartTime).String(), "features", g.Features)
 			}
@@ -173,7 +173,7 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 
 func (g *GameServer) watchUDP() {
 	for {
-		_, addr, err := g.UDPListener.ReadFromUDP(g.GameData.recvBuffer)
+		_, addr, err := g.udpListener.ReadFromUDP(g.gameData.recvBuffer)
 		if err != nil && !g.isConnClosed(err) {
 			g.Logger.Error(err, "error from UdpListener")
 			continue
@@ -198,26 +198,26 @@ func (g *GameServer) watchUDP() {
 
 func (g *GameServer) createUDPServer() error {
 	var err error
-	g.UDPListener, err = net.ListenUDP("udp", &net.UDPAddr{Port: g.Port})
+	g.udpListener, err = net.ListenUDP("udp", &net.UDPAddr{Port: g.Port})
 	if err != nil {
 		return err
 	}
-	if err := ipv4.NewConn(g.UDPListener).SetTOS(CS4 << 2); err != nil {
+	if err := ipv4.NewConn(g.udpListener).SetTOS(CS4 << 2); err != nil {
 		g.Logger.Error(err, "could not set IPv4 DSCP")
 	}
-	if err := ipv6.NewConn(g.UDPListener).SetTrafficClass(CS4 << 2); err != nil {
+	if err := ipv6.NewConn(g.udpListener).SetTrafficClass(CS4 << 2); err != nil {
 		g.Logger.Error(err, "could not set IPv6 DSCP")
 	}
 	g.Logger.Info("Created UDP server", "port", g.Port)
 
-	g.GameData.BufferSize = 3
+	g.gameData.bufferSize = 3
 	for i := range 4 {
-		g.GameData.Inputs[i], _ = lru.New[uint32, InputData](InputDataMax)
-		g.GameData.BufferHealth[i], _ = lru.New[uint32, byte](InputDataMax)
+		g.gameData.inputs[i], _ = lru.New[uint32, InputData](InputDataMax)
+		g.gameData.bufferHealth[i], _ = lru.New[uint32, byte](InputDataMax)
 	}
-	g.GameData.SyncValues, _ = lru.New[uint32, []byte](100) // Store up to 100 sync values
-	g.GameData.sendBuffer = make([]byte, 508)
-	g.GameData.recvBuffer = make([]byte, 1500)
+	g.gameData.syncValues, _ = lru.New[uint32, []byte](100) // Store up to 100 sync values
+	g.gameData.sendBuffer = make([]byte, 508)
+	g.gameData.recvBuffer = make([]byte, 1500)
 
 	go g.watchUDP()
 	return nil

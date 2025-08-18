@@ -19,38 +19,38 @@ type Client struct {
 }
 
 type Registration struct {
-	RegID  uint32
-	Plugin byte
-	Raw    byte
+	regID  uint32
+	plugin byte
+	raw    byte
 }
 
 type GameServer struct {
 	StartTime          time.Time
 	Players            map[string]Client
 	PlayersMutex       sync.Mutex
-	TCPListener        *net.TCPListener
-	UDPListener        *net.UDPConn
-	Registrations      map[byte]*Registration
-	RegistrationsMutex sync.Mutex
-	TCPMutex           sync.Mutex
-	TCPFiles           map[string][]byte
-	CustomData         map[byte][]byte
+	tcpListener        *net.TCPListener
+	udpListener        *net.UDPConn
+	registrations      map[byte]*Registration
+	registrationsMutex sync.Mutex
+	tcpMutex           sync.Mutex
+	tcpFiles           map[string][]byte
+	customData         map[byte][]byte
 	Logger             logr.Logger
 	GameName           string
 	Password           string
 	ClientSha          string
 	MD5                string
 	Emulator           string
-	TCPSettings        []byte
-	GameData           GameData
-	GameDataMutex      sync.Mutex
+	tcpSettings        []byte
+	gameData           GameData
+	gameDataMutex      sync.Mutex
 	Port               int
-	HasSettings        bool
+	hasSettings        bool
 	Running            bool
 	Features           map[string]string
 	NeedsUpdatePlayers bool
 	NumberOfPlayers    int
-	BufferTarget       uint32
+	BufferTarget       byte
 	QuitChannel        *chan bool
 }
 
@@ -62,7 +62,7 @@ func (g *GameServer) CreateNetworkServers(basePort int, maxGames int, roomName s
 	}
 	if err := g.createUDPServer(); err != nil {
 		g.Logger.Error(err, "error creating UDP server")
-		if err := g.TCPListener.Close(); err != nil && !g.isConnClosed(err) {
+		if err := g.tcpListener.Close(); err != nil && !g.isConnClosed(err) {
 			g.Logger.Error(err, "error closing TcpListener")
 		}
 		return 0
@@ -71,12 +71,12 @@ func (g *GameServer) CreateNetworkServers(basePort int, maxGames int, roomName s
 }
 
 func (g *GameServer) CloseServers() {
-	if err := g.UDPListener.Close(); err != nil && !g.isConnClosed(err) {
+	if err := g.udpListener.Close(); err != nil && !g.isConnClosed(err) {
 		g.Logger.Error(err, "error closing UdpListener")
 	} else if err == nil {
 		g.Logger.Info("UDP server closed")
 	}
-	if err := g.TCPListener.Close(); err != nil && !g.isConnClosed(err) {
+	if err := g.tcpListener.Close(); err != nil && !g.isConnClosed(err) {
 		g.Logger.Error(err, "error closing TcpListener")
 	} else if err == nil {
 		g.Logger.Info("TCP server closed")
@@ -93,16 +93,18 @@ func (g *GameServer) isConnClosed(err error) bool {
 	return strings.Contains(err.Error(), "use of closed network connection")
 }
 
-func (g *GameServer) bufferHealthAverage(playerNumber int) (float32, error) {
-	defer g.GameData.BufferHealth[playerNumber].Purge()
+func (g *GameServer) lowestBufferHealth(playerNumber int) (byte, error) {
+	defer g.gameData.bufferHealth[playerNumber].Purge()
 
-	if g.GameData.BufferHealth[playerNumber].Len() > 0 {
-		var bufferHealth float32
-		for _, k := range g.GameData.BufferHealth[playerNumber].Keys() {
-			value, _ := g.GameData.BufferHealth[playerNumber].Peek(k)
-			bufferHealth += float32(value)
+	if g.gameData.bufferHealth[playerNumber].Len() > 0 {
+		bufferHealth := byte(255) // Start with the maximum possible value
+		for _, k := range g.gameData.bufferHealth[playerNumber].Keys() {
+			value, _ := g.gameData.bufferHealth[playerNumber].Peek(k)
+			if value < bufferHealth {
+				bufferHealth = value
+			}
 		}
-		return bufferHealth / float32(g.GameData.BufferHealth[playerNumber].Len()), nil
+		return bufferHealth, nil
 	} else {
 		return 0, fmt.Errorf("no buffer health data for player %d", playerNumber)
 	}
@@ -116,31 +118,31 @@ func (g *GameServer) ManageBuffer() {
 		}
 
 		// Find the largest buffer health
-		var bufferHealth float32
+		var bufferHealth byte
 		var activePlayers bool
 		var leadPlayer int
-		g.GameDataMutex.Lock() // BufferHealth can be modified by processUDP in a different thread
+		g.gameDataMutex.Lock() // BufferHealth can be modified by processUDP in a different thread
 		for i := range 4 {
 			var err error
-			g.GameData.BufferHealthAverage[i], err = g.bufferHealthAverage(i)
-			if err == nil && g.GameData.CountLag[i] == 0 {
+			g.gameData.lowestBufferHealth[i], err = g.lowestBufferHealth(i)
+			if err == nil && g.gameData.countLag[i] == 0 {
 				activePlayers = true
 
-				if g.GameData.BufferHealthAverage[i] > bufferHealth {
-					bufferHealth = g.GameData.BufferHealthAverage[i]
+				if g.gameData.lowestBufferHealth[i] > bufferHealth {
+					bufferHealth = g.gameData.lowestBufferHealth[i]
 					leadPlayer = i + 1
 				}
 			}
 		}
-		g.GameDataMutex.Unlock()
+		g.gameDataMutex.Unlock()
 
 		if activePlayers {
-			if bufferHealth > float32(g.BufferTarget)+0.5 && g.GameData.BufferSize > 0 {
-				g.GameData.BufferSize--
-				g.Logger.Info("reduced buffer size", "bufferHealth", bufferHealth, "bufferSize", g.GameData.BufferSize, "leadPlayer", leadPlayer)
-			} else if bufferHealth < float32(g.BufferTarget)-0.5 {
-				g.GameData.BufferSize++
-				g.Logger.Info("increased buffer size", "bufferHealth", bufferHealth, "bufferSize", g.GameData.BufferSize, "leadPlayer", leadPlayer)
+			if bufferHealth > g.BufferTarget && g.gameData.bufferSize > 0 {
+				g.gameData.bufferSize--
+				g.Logger.Info("reduced buffer size", "bufferHealth", bufferHealth, "bufferSize", g.gameData.bufferSize, "leadPlayer", leadPlayer)
+			} else if bufferHealth < g.BufferTarget {
+				g.gameData.bufferSize++
+				g.Logger.Info("increased buffer size", "bufferHealth", bufferHealth, "bufferSize", g.gameData.bufferSize, "leadPlayer", leadPlayer)
 			}
 		}
 
@@ -154,20 +156,20 @@ func (g *GameServer) ManagePlayers() {
 		playersActive := false // used to check if anyone is still around
 		var i byte
 
-		g.GameDataMutex.Lock() // PlayerAlive and Status can be modified by processUDP in a different thread
+		g.gameDataMutex.Lock() // PlayerAlive and Status can be modified by processUDP in a different thread
 		for i = range 4 {
-			_, ok := g.Registrations[i]
+			_, ok := g.registrations[i]
 			if ok {
-				if g.GameData.PlayerAlive[i] {
-					g.Logger.Info("player status", "player", i, "regID", g.Registrations[i].RegID, "bufferHealthAverage", g.GameData.BufferHealthAverage[i], "bufferSize", g.GameData.BufferSize, "countLag", g.GameData.CountLag[i], "address", g.GameData.PlayerAddresses[i])
+				if g.gameData.playerAlive[i] {
+					g.Logger.Info("player status", "player", i, "regID", g.registrations[i].regID, "bufferHealth", g.gameData.lowestBufferHealth[i], "bufferSize", g.gameData.bufferSize, "countLag", g.gameData.countLag[i], "address", g.gameData.playerAddresses[i])
 					playersActive = true
 				} else {
-					g.Logger.Info("player disconnected UDP", "player", i, "regID", g.Registrations[i].RegID, "address", g.GameData.PlayerAddresses[i])
-					g.GameData.Status |= (0x1 << (i + 1))
+					g.Logger.Info("player disconnected UDP", "player", i, "regID", g.registrations[i].regID, "address", g.gameData.playerAddresses[i])
+					g.gameData.status |= (0x1 << (i + 1))
 
-					g.RegistrationsMutex.Lock() // Registrations can be modified by processTCP
-					delete(g.Registrations, i)
-					g.RegistrationsMutex.Unlock()
+					g.registrationsMutex.Lock() // Registrations can be modified by processTCP
+					delete(g.registrations, i)
+					g.registrationsMutex.Unlock()
 
 					for k, v := range g.Players {
 						if v.Number == int(i) {
@@ -177,12 +179,12 @@ func (g *GameServer) ManagePlayers() {
 							g.PlayersMutex.Unlock()
 						}
 					}
-					g.GameData.BufferHealth[i].Purge()
+					g.gameData.bufferHealth[i].Purge()
 				}
 			}
-			g.GameData.PlayerAlive[i] = false
+			g.gameData.playerAlive[i] = false
 		}
-		g.GameDataMutex.Unlock()
+		g.gameDataMutex.Unlock()
 
 		if !playersActive {
 			g.Logger.Info("no more players, closing room", "numPlayers", g.NumberOfPlayers, "clientSHA", g.ClientSha, "playTime", time.Since(g.StartTime).String())

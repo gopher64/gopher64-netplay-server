@@ -63,7 +63,7 @@ const (
 )
 
 type LobbyServer struct {
-	GameServers      map[string]*gameserver.GameServer
+	gameServers      map[string]*gameserver.GameServer
 	Logger           logr.Logger
 	Name             string
 	Motd             string
@@ -74,7 +74,7 @@ type LobbyServer struct {
 	CloseOnFinish    bool
 	quitChannel      chan bool
 	Timeout          int
-	SendMutex        sync.Mutex
+	sendMutex        sync.Mutex
 }
 
 type RoomData struct {
@@ -85,7 +85,7 @@ type RoomData struct {
 	RoomName     string            `json:"room_name"`
 	MD5          string            `json:"MD5"`
 	Port         int               `json:"port"`
-	BufferTarget uint32            `json:"buffer_target,omitempty"`
+	BufferTarget byte              `json:"buffer_target,omitempty"`
 }
 
 type SocketMessage struct {
@@ -107,9 +107,9 @@ const NetplayAPIVersion = 17
 
 func (s *LobbyServer) sendData(ws *websocket.Conn, message SocketMessage) error {
 	// s.Logger.Info("sending message", "message", message, "address", ws.Request().RemoteAddr)
-	s.SendMutex.Lock()
+	s.sendMutex.Lock()
 	err := ws.WriteJSON(message)
-	s.SendMutex.Unlock()
+	s.sendMutex.Unlock()
 	if err != nil {
 		if !errors.Is(err, websocket.ErrCloseSent) {
 			return err
@@ -120,7 +120,7 @@ func (s *LobbyServer) sendData(ws *websocket.Conn, message SocketMessage) error 
 
 // this function finds the GameServer pointer based on the port number.
 func (s *LobbyServer) findGameServer(port int) (string, *gameserver.GameServer) {
-	for i, v := range s.GameServers {
+	for i, v := range s.gameServers {
 		if v.Port == port {
 			return i, v
 		}
@@ -232,7 +232,7 @@ func (s *LobbyServer) watchGameServer(name string, g *gameserver.GameServer) {
 	for {
 		if !g.Running {
 			g.Logger.Info("game server deleted", "port", g.Port)
-			delete(s.GameServers, name)
+			delete(s.gameServers, name)
 			return
 		}
 		if g.NeedsUpdatePlayers {
@@ -299,7 +299,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		err := ws.ReadJSON(&receivedMessage)
 		if err != nil {
 			if e, ok := err.(*websocket.CloseError); ok {
-				for i, v := range s.GameServers {
+				for i, v := range s.gameServers {
 					for k, w := range v.Players {
 						if w.Socket == ws {
 							v.Logger.Info("Player has left lobby", "closeCode", e.Code, "player", k, "address", ws.RemoteAddr())
@@ -320,7 +320,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						if len(v.Players) == 0 {
 							v.Logger.Info("No more players in lobby, deleting")
 							v.CloseServers()
-							delete(s.GameServers, i)
+							delete(s.gameServers, i)
 						}
 					}
 				}
@@ -337,7 +337,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 
 		if receivedMessage.Type == TypeRequestCreateRoom {
 			sendMessage.Type = TypeReplyCreateRoom
-			_, exists := s.GameServers[receivedMessage.Room.RoomName]
+			_, exists := s.gameServers[receivedMessage.Room.RoomName]
 			if exists {
 				sendMessage.Accept = DuplicateName
 				sendMessage.Message = "Room with this name already exists"
@@ -410,7 +410,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						Socket:  ws,
 						InLobby: true,
 					}
-					s.GameServers[receivedMessage.Room.RoomName] = &g
+					s.gameServers[receivedMessage.Room.RoomName] = &g
 					g.Logger.Info("Created new room", "port", g.Port, "creator", receivedMessage.PlayerName, "clientSHA", receivedMessage.ClientSha, "creatorIP", ws.RemoteAddr(), "buffer_target", g.BufferTarget, "features", receivedMessage.Room.Features)
 					sendMessage.Accept = Accepted
 					sendMessage.Room.RoomName = receivedMessage.Room.RoomName
@@ -492,7 +492,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			} else {
 				authenticated = true
 				var rooms []RoomData
-				for i, v := range s.GameServers {
+				for i, v := range s.gameServers {
 					if v.Running {
 						continue
 					}
@@ -786,7 +786,7 @@ func (s *LobbyServer) runBroadcastServer(broadcastPort int) {
 }
 
 func (s *LobbyServer) RunSocketServer(broadcastPort int) error {
-	s.GameServers = make(map[string]*gameserver.GameServer)
+	s.gameServers = make(map[string]*gameserver.GameServer)
 	if !s.DisableBroadcast {
 		go s.runBroadcastServer(broadcastPort)
 	}
@@ -801,7 +801,7 @@ func (s *LobbyServer) RunSocketServer(broadcastPort int) error {
 	if s.Timeout > 0 {
 		go func() {
 			time.Sleep(time.Duration(s.Timeout) * time.Minute)
-			if len(s.GameServers) == 0 {
+			if len(s.gameServers) == 0 {
 				s.Logger.Info("timeout reached, closing server")
 				s.quitChannel <- true
 			}
@@ -822,7 +822,7 @@ func (s *LobbyServer) LogServerStats() {
 	for {
 		memStats := runtime.MemStats{}
 		runtime.ReadMemStats(&memStats)
-		s.Logger.Info("server stats", "games", len(s.GameServers), "NumGoroutine", runtime.NumGoroutine(), "HeapAlloc", memStats.HeapAlloc, "HeapObjects", memStats.HeapObjects)
+		s.Logger.Info("server stats", "games", len(s.gameServers), "NumGoroutine", runtime.NumGoroutine(), "HeapAlloc", memStats.HeapAlloc, "HeapObjects", memStats.HeapObjects)
 		time.Sleep(time.Minute)
 	}
 }
