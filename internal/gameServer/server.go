@@ -115,13 +115,14 @@ func (g *GameServer) ManageBuffer() {
 			return
 		}
 
-		var bufferHealth float32
+		var bufferHealth float32 = -1.0
 		var leadPlayer int
 		g.gameDataMutex.Lock() // BufferHealth can be modified by processUDP in a different thread
 		for i := range 4 {
 			var err error
 			g.gameData.averageBufferHealth[i], err = g.averageBufferHealth(i)
 			if err == nil && g.gameData.countLag[i] == 0 {
+				// if g.gameData.averageBufferHealth[i] > bufferHealth {
 				if leadPlayer == 0 {
 					bufferHealth = g.gameData.averageBufferHealth[i]
 					leadPlayer = i + 1
