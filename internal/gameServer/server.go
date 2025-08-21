@@ -141,6 +141,7 @@ func (g *GameServer) ManageBuffer() {
 				// if leadPlayer == 0 {
 				// if g.gameData.averageBufferHealth[i] > bufferHealth {
 				if g.gameData.averageCountLag[i] < countLag {
+					countLag = g.gameData.averageCountLag[i]
 					bufferHealth = g.gameData.averageBufferHealth[i]
 					leadPlayer = i + 1
 				}
