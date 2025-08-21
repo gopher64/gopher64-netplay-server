@@ -23,7 +23,7 @@ type GameData struct {
 	playerAddresses     [4]*net.UDPAddr
 	bufferSize          uint32
 	averageBufferHealth [4]float32
-	bufferHealth        [4]*lru.Cache[uint32, byte]
+	bufferHealth        [4][]byte
 	inputs              [4]*lru.Cache[uint32, InputData]
 	pendingInput        [4]InputData
 	countLag            [4]uint32
@@ -151,7 +151,7 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 		}
 		g.gameData.countLag[sendingPlayerNumber] = g.sendUDPInput(count, addr, playerNumber, spectator != 0, sendingPlayerNumber)
 		g.gameDataMutex.Lock() // PlayerAlive and BufferHealth can be modified in different threads
-		g.gameData.bufferHealth[sendingPlayerNumber].Add(count, g.gameData.recvBuffer[11])
+		g.gameData.bufferHealth[sendingPlayerNumber] = append(g.gameData.bufferHealth[sendingPlayerNumber], g.gameData.recvBuffer[11])
 		g.gameData.playerAlive[sendingPlayerNumber] = true
 		g.gameDataMutex.Unlock()
 	case CP0Info:
@@ -213,7 +213,7 @@ func (g *GameServer) createUDPServer() error {
 	g.gameData.bufferSize = 3
 	for i := range 4 {
 		g.gameData.inputs[i], _ = lru.New[uint32, InputData](InputDataMax)
-		g.gameData.bufferHealth[i], _ = lru.New[uint32, byte](InputDataMax)
+		g.gameData.bufferHealth[i] = make([]byte, 0, InputDataMax)
 	}
 	g.gameData.syncValues, _ = lru.New[uint32, []byte](100) // Store up to 100 sync values
 	g.gameData.sendBuffer = make([]byte, 508)
