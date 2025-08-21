@@ -353,7 +353,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 								g.PlayersMutex.Unlock()
 							}
 						}
-						g.gameData.bufferHealth[i].Purge()
+						g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
 						g.gameDataMutex.Unlock()
 					}
 				}

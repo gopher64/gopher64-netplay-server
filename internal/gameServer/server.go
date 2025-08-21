@@ -94,15 +94,14 @@ func (g *GameServer) isConnClosed(err error) bool {
 }
 
 func (g *GameServer) averageBufferHealth(playerNumber int) (float32, error) {
-	defer g.gameData.bufferHealth[playerNumber].Purge()
+	defer func() { g.gameData.bufferHealth[playerNumber] = g.gameData.bufferHealth[playerNumber][:0] }()
 
-	if g.gameData.bufferHealth[playerNumber].Len() > 0 {
+	if len(g.gameData.bufferHealth[playerNumber]) > 0 {
 		var total float32
-		for _, k := range g.gameData.bufferHealth[playerNumber].Keys() {
-			value, _ := g.gameData.bufferHealth[playerNumber].Peek(k)
+		for _, value := range g.gameData.bufferHealth[playerNumber] {
 			total += float32(value)
 		}
-		return total / float32(g.gameData.bufferHealth[playerNumber].Len()), nil
+		return total / float32(len(g.gameData.bufferHealth[playerNumber])), nil
 	} else {
 		return 0, fmt.Errorf("no buffer health data for player %d", playerNumber)
 	}
@@ -174,7 +173,7 @@ func (g *GameServer) ManagePlayers() {
 							g.PlayersMutex.Unlock()
 						}
 					}
-					g.gameData.bufferHealth[i].Purge()
+					g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
 				}
 			}
 			g.gameData.playerAlive[i] = false
