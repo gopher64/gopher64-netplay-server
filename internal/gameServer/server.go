@@ -3,7 +3,6 @@ package gameserver
 import (
 	"fmt"
 	"net"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -108,10 +107,15 @@ func (g *GameServer) averageBufferHealth(playerNumber int) (float32, error) {
 	}
 }
 
-func (g *GameServer) maxCountLag(playerNumber int) (uint32, error) {
+func (g *GameServer) averageCountLag(playerNumber int) (float32, error) {
 	defer func() { g.gameData.countLag[playerNumber] = g.gameData.countLag[playerNumber][:0] }()
+
 	if len(g.gameData.countLag[playerNumber]) > 0 {
-		return slices.Max(g.gameData.countLag[playerNumber]), nil
+		var total float32
+		for _, value := range g.gameData.countLag[playerNumber] {
+			total += float32(value)
+		}
+		return total / float32(len(g.gameData.countLag[playerNumber])), nil
 	} else {
 		return 0, fmt.Errorf("no count lag data for player %d", playerNumber)
 	}
@@ -125,16 +129,18 @@ func (g *GameServer) ManageBuffer() {
 		}
 
 		var bufferHealth float32 = -1.0
+		var countLag float32 = 255
 		var leadPlayer int
 		g.gameDataMutex.Lock() // BufferHealth can be modified by processUDP in a different thread
 		for i := range 4 {
 			var errBufferHeatlh error
 			var errCountLag error
 			g.gameData.averageBufferHealth[i], errBufferHeatlh = g.averageBufferHealth(i)
-			g.gameData.maxCountLag[i], errCountLag = g.maxCountLag(i)
-			if errBufferHeatlh == nil && errCountLag == nil && g.gameData.maxCountLag[i] == 0 {
+			g.gameData.averageCountLag[i], errCountLag = g.averageCountLag(i)
+			if errBufferHeatlh == nil && errCountLag == nil {
+				// if leadPlayer == 0 {
 				// if g.gameData.averageBufferHealth[i] > bufferHealth {
-				if leadPlayer == 0 {
+				if g.gameData.averageCountLag[i] < countLag {
 					bufferHealth = g.gameData.averageBufferHealth[i]
 					leadPlayer = i + 1
 				}
@@ -167,7 +173,7 @@ func (g *GameServer) ManagePlayers() {
 			_, ok := g.registrations[i]
 			if ok {
 				if g.gameData.playerAlive[i] {
-					g.Logger.Info("player status", "player", i, "regID", g.registrations[i].regID, "bufferHealth", g.gameData.averageBufferHealth[i], "bufferSize", g.gameData.bufferSize, "countLag", g.gameData.maxCountLag[i], "address", g.gameData.playerAddresses[i])
+					g.Logger.Info("player status", "player", i, "regID", g.registrations[i].regID, "bufferHealth", g.gameData.averageBufferHealth[i], "bufferSize", g.gameData.bufferSize, "countLag", g.gameData.averageCountLag[i], "address", g.gameData.playerAddresses[i])
 					playersActive = true
 				} else {
 					g.Logger.Info("player disconnected UDP", "player", i, "regID", g.registrations[i].regID, "address", g.gameData.playerAddresses[i])

@@ -23,7 +23,7 @@ type GameData struct {
 	playerAddresses     [4]*net.UDPAddr
 	bufferSize          uint32
 	averageBufferHealth [4]float32
-	maxCountLag         [4]uint32
+	averageCountLag     [4]float32
 	bufferHealth        [4][]byte
 	inputs              [4]*lru.Cache[uint32, InputData]
 	pendingInput        [4]InputData
