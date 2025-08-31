@@ -42,9 +42,10 @@ const (
 func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize bool) {
 	startTime := time.Now()
 	var ok bool
+	var data []byte
 	for !ok {
 		g.tcpMutex.Lock()
-		_, ok = g.tcpFiles[tcpData.filename]
+		data, ok = g.tcpFiles[tcpData.filename]
 		g.tcpMutex.Unlock()
 		if !ok {
 			time.Sleep(time.Millisecond)
@@ -53,22 +54,20 @@ func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize b
 				return
 			}
 		} else {
-			g.tcpMutex.Lock()
 			if withSize {
 				size := make([]byte, 4)
-				binary.BigEndian.PutUint32(size, uint32(len(g.tcpFiles[tcpData.filename])))
+				binary.BigEndian.PutUint32(size, uint32(len(data)))
 				_, err := conn.Write(size)
 				if err != nil {
 					g.Logger.Error(err, "could not write size", "address", conn.RemoteAddr().String())
 				}
 			}
-			if len(g.tcpFiles[tcpData.filename]) > 0 {
-				_, err := conn.Write(g.tcpFiles[tcpData.filename])
+			if len(data) > 0 {
+				_, err := conn.Write(data)
 				if err != nil {
 					g.Logger.Error(err, "could not write file", "address", conn.RemoteAddr().String())
 				}
 			}
-			g.tcpMutex.Unlock()
 
 			// g.Logger.Info("sent save file", "filename", tcpData.filename, "filesize", tcpData.filesize, "address", conn.RemoteAddr().String())
 			tcpData.filename = ""
@@ -96,9 +95,10 @@ func (g *GameServer) tcpSendSettings(conn *net.TCPConn) {
 func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 	startTime := time.Now()
 	var ok bool
+	var data []byte
 	for !ok {
 		g.tcpMutex.Lock()
-		_, ok = g.customData[customID]
+		data, ok = g.customData[customID]
 		g.tcpMutex.Unlock()
 		if !ok {
 			time.Sleep(time.Millisecond)
@@ -107,9 +107,7 @@ func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 				return
 			}
 		} else {
-			g.tcpMutex.Lock()
-			_, err := conn.Write(g.customData[customID])
-			g.tcpMutex.Unlock()
+			_, err := conn.Write(data)
 			if err != nil {
 				g.Logger.Error(err, "could not write data", "address", conn.RemoteAddr().String())
 			}
