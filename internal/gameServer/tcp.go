@@ -53,6 +53,7 @@ func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize b
 				return
 			}
 		} else {
+			g.tcpMutex.Lock()
 			if withSize {
 				size := make([]byte, 4)
 				binary.BigEndian.PutUint32(size, uint32(len(g.tcpFiles[tcpData.filename])))
@@ -67,6 +68,7 @@ func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize b
 					g.Logger.Error(err, "could not write file", "address", conn.RemoteAddr().String())
 				}
 			}
+			g.tcpMutex.Unlock()
 
 			// g.Logger.Info("sent save file", "filename", tcpData.filename, "filesize", tcpData.filesize, "address", conn.RemoteAddr().String())
 			tcpData.filename = ""
@@ -105,7 +107,9 @@ func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 				return
 			}
 		} else {
+			g.tcpMutex.Lock()
 			_, err := conn.Write(g.customData[customID])
+			g.tcpMutex.Unlock()
 			if err != nil {
 				g.Logger.Error(err, "could not write data", "address", conn.RemoteAddr().String())
 			}
