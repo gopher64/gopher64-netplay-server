@@ -247,9 +247,9 @@ func (s *LobbyServer) watchGameServer(name string, g *gameserver.GameServer) {
 
 func (s *LobbyServer) validateAuth(receivedMessage SocketMessage) (int, error) {
 	if receivedMessage.NetplayVersion != NetplayAPIVersion {
-		return MismatchVersion, fmt.Errorf("Client and server not at same API version. Please update your emulator")
+		return MismatchVersion, fmt.Errorf("client and server not at same API version, please update your emulator")
 	} else if receivedMessage.Emulator == "" {
-		return BadEmulator, fmt.Errorf("Emulator name cannot be empty")
+		return BadEmulator, fmt.Errorf("emulator name cannot be empty")
 	}
 
 	if !s.EnableAuth {
