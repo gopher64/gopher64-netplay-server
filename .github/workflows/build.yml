@@ -30,7 +30,7 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o gopher64-netplay-server-amd64 .
 
       - name: Upload folder
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: gopher64-netplay-server
           path: gopher64-netplay-server*
