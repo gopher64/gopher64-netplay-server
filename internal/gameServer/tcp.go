@@ -405,22 +405,24 @@ func (g *GameServer) watchTCP() {
 			return
 		}
 
-		validated := false
-		remoteAddr, err := net.ResolveTCPAddr(conn.RemoteAddr().Network(), conn.RemoteAddr().String())
-		if err != nil {
-			g.Logger.Error(err, "could not resolve remote IP")
-			conn.Close() //nolint:errcheck
-			continue
-		}
-		for _, v := range g.Players {
-			if remoteAddr.IP.Equal(v.IP) {
-				validated = true
+		if g.VerifyIP {
+			validated := false
+			remoteAddr, err := net.ResolveTCPAddr(conn.RemoteAddr().Network(), conn.RemoteAddr().String())
+			if err != nil {
+				g.Logger.Error(err, "could not resolve remote IP")
+				conn.Close() //nolint:errcheck
+				continue
 			}
-		}
-		if !validated {
-			g.Logger.Error(fmt.Errorf("invalid tcp connection"), "bad IP", "IP", conn.RemoteAddr().String())
-			conn.Close() //nolint:errcheck
-			continue
+			for _, v := range g.Players {
+				if remoteAddr.IP.Equal(v.IP) {
+					validated = true
+				}
+			}
+			if !validated {
+				g.Logger.Error(fmt.Errorf("invalid tcp connection"), "bad IP", "IP", conn.RemoteAddr().String())
+				conn.Close() //nolint:errcheck
+				continue
+			}
 		}
 
 		g.Logger.Info("received TCP connection", "address", conn.RemoteAddr().String())

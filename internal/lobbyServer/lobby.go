@@ -71,6 +71,7 @@ type LobbyServer struct {
 	MaxGames         int
 	DisableBroadcast bool
 	EnableAuth       bool
+	VerifyIP         bool
 	CloseOnFinish    bool
 	quitChannel      chan bool
 	Timeout          int
@@ -389,6 +390,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					g.Players = make(map[string]gameserver.Client)
 					g.Features = receivedMessage.Room.Features
 					g.BufferTarget = receivedMessage.Room.BufferTarget
+					g.VerifyIP = s.VerifyIP
 
 					ip, _, err := net.SplitHostPort(ws.RemoteAddr().String())
 					if err != nil {

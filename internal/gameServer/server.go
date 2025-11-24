@@ -46,6 +46,7 @@ type GameServer struct {
 	gameDataMutex      sync.Mutex
 	Port               int
 	hasSettings        bool
+	VerifyIP           bool
 	Running            bool
 	Features           map[string]string
 	NeedsUpdatePlayers bool

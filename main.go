@@ -34,6 +34,7 @@ func main() {
 	motd := flag.String("motd", "", "MOTD message to display to clients")
 	maxGames := flag.Int("max-games", 10, "Maximum number of concurrent games")
 	enableAuth := flag.Bool("enable-auth", false, "Enable client authentication")
+	verifyIP := flag.Bool("verify-ip", false, "Verify that lobby IP addresses match in-game IP addresses")
 	closeOnFinish := flag.Bool("close-on-finish", false, "Close the server when the game finishes, implies -max-games=1")
 	timeout := flag.Int("timeout", 0, "Timeout in minutes. Closes the server if no games are running after this time")
 	flag.Parse()
@@ -70,6 +71,7 @@ func main() {
 		Motd:             *motd,
 		MaxGames:         *maxGames,
 		EnableAuth:       *enableAuth,
+		VerifyIP:         *verifyIP,
 		CloseOnFinish:    *closeOnFinish,
 		Timeout:          *timeout,
 	}
