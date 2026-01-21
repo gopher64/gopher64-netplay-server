@@ -293,7 +293,7 @@ var upgrader = websocket.Upgrader{}
 func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		s.Logger.Error(err, "failed to create websocket")
+		// s.Logger.Error(err, "failed to create websocket")
 		return
 	}
 	authenticated := false
