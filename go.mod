@@ -1,6 +1,6 @@
 module github.com/gopher64/gopher64-netplay-server
 
-go 1.25.6
+go 1.25.7
 
 require (
 	github.com/go-logr/zapr v1.3.0
