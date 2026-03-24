@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -47,7 +48,7 @@ type GameServer struct {
 	VerifyIP           bool
 	Running            bool
 	Features           map[string]string
-	NeedsUpdatePlayers bool
+	NeedsUpdatePlayers atomic.Bool
 	NumberOfPlayers    int
 	BufferTarget       byte
 	QuitChannel        *chan bool
@@ -184,7 +185,7 @@ func (g *GameServer) ManagePlayers() {
 					g.Players.Range(func(k, v any) bool {
 						if v.(Client).Number == int(i) {
 							g.Players.Delete(k)
-							g.NeedsUpdatePlayers = true
+							g.NeedsUpdatePlayers.Store(true)
 						}
 						return true
 					})

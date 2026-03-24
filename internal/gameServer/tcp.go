@@ -340,18 +340,16 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 					g.gameDataMutex.Lock()
 					g.gameData.playerAlive[i] = false
 					g.gameData.status |= (0x1 << (i + 1))
-					g.gameDataMutex.Unlock()
 					g.registrations.Delete(i)
 
 					g.Players.Range(func(k, v any) bool {
 						if v.(Client).Number == int(i) {
 							g.Players.Delete(k)
-							g.NeedsUpdatePlayers = true
+							g.NeedsUpdatePlayers.Store(true)
 						}
 						return true
 					})
 
-					g.gameDataMutex.Lock()
 					g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
 					g.gameDataMutex.Unlock()
 				}

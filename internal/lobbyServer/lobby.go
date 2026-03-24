@@ -245,8 +245,8 @@ func (s *LobbyServer) watchGameServer(name string, g *gameserver.GameServer) {
 			delete(s.gameServers, name)
 			return
 		}
-		if g.NeedsUpdatePlayers {
-			g.NeedsUpdatePlayers = false
+		if g.NeedsUpdatePlayers.Load() {
+			g.NeedsUpdatePlayers.Store(false)
 			s.updatePlayers(g)
 		}
 		time.Sleep(time.Second * 5)
