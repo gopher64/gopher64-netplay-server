@@ -32,7 +32,7 @@ type GameServer struct {
 	udpListener        *net.UDPConn
 	registrations      map[byte]*Registration
 	registrationsMutex sync.Mutex
-	tcpMutex           sync.Mutex
+	tcpMutex           sync.RWMutex
 	tcpFiles           map[string][]byte
 	customData         map[byte][]byte
 	Logger             logr.Logger

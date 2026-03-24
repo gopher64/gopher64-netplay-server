@@ -44,9 +44,9 @@ func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize b
 	var ok bool
 	var data []byte
 	for !ok {
-		g.tcpMutex.Lock()
+		g.tcpMutex.RLock()
 		data, ok = g.tcpFiles[tcpData.filename]
-		g.tcpMutex.Unlock()
+		g.tcpMutex.RUnlock()
 		if !ok {
 			time.Sleep(time.Millisecond)
 			if time.Since(startTime) > TCPTimeout {
@@ -97,9 +97,9 @@ func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 	var ok bool
 	var data []byte
 	for !ok {
-		g.tcpMutex.Lock()
+		g.tcpMutex.RLock()
 		data, ok = g.customData[customID]
-		g.tcpMutex.Unlock()
+		g.tcpMutex.RUnlock()
 		if !ok {
 			time.Sleep(time.Millisecond)
 			if time.Since(startTime) > TCPTimeout {
