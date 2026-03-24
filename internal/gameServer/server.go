@@ -26,15 +26,12 @@ type Registration struct {
 
 type GameServer struct {
 	StartTime          time.Time
-	Players            map[string]Client
-	PlayersMutex       sync.RWMutex
+	Players            sync.Map
 	tcpListener        *net.TCPListener
 	udpListener        *net.UDPConn
-	registrations      map[byte]*Registration
-	registrationsMutex sync.RWMutex
-	tcpMutex           sync.RWMutex
-	tcpFiles           map[string][]byte
-	customData         map[byte][]byte
+	registrations      sync.Map
+	tcpFiles           sync.Map
+	customData         sync.Map
 	Logger             logr.Logger
 	GameName           string
 	Password           string
@@ -43,7 +40,6 @@ type GameServer struct {
 	Emulator           string
 	tcpSettings        []byte
 	gameData           GameData
-	gameDataMutex      sync.Mutex
 	Port               int
 	hasSettings        bool
 	VerifyIP           bool
@@ -132,7 +128,6 @@ func (g *GameServer) ManageBuffer() {
 		var bufferHealth float32 = -1.0
 		var countLag float32 = 255
 		var leadPlayer int
-		g.gameDataMutex.Lock() // BufferHealth can be modified by processUDP in a different thread
 		for i := range 4 {
 			var errBufferHeatlh error
 			var errCountLag error
@@ -158,7 +153,6 @@ func (g *GameServer) ManageBuffer() {
 				g.Logger.Info("increased buffer size", "bufferHealth", bufferHealth, "bufferSize", g.gameData.bufferSize, "leadPlayer", leadPlayer)
 			}
 		}
-		g.gameDataMutex.Unlock()
 
 		time.Sleep(time.Second)
 	}
@@ -170,36 +164,30 @@ func (g *GameServer) ManagePlayers() {
 		playersActive := false // used to check if anyone is still around
 		var i byte
 
-		// Lock registrations before gameData so TCP paths that take registrationsMutex then gameDataMutex cannot deadlock.
-		g.registrationsMutex.Lock()
-		g.gameDataMutex.Lock()
 		for i = range 4 {
-			_, ok := g.registrations[i]
+			v, ok := g.registrations.Load(i)
 			if ok {
 				if g.gameData.playerAlive[i] {
-					g.Logger.Info("player status", "player", i, "regID", g.registrations[i].regID, "bufferHealth", g.gameData.averageBufferHealth[i], "bufferSize", g.gameData.bufferSize, "countLag", g.gameData.averageCountLag[i], "address", g.gameData.playerAddresses[i])
+					g.Logger.Info("player status", "player", i, "regID", v.(*Registration).regID, "bufferHealth", g.gameData.averageBufferHealth[i], "bufferSize", g.gameData.bufferSize, "countLag", g.gameData.averageCountLag[i], "address", g.gameData.playerAddresses[i])
 					playersActive = true
 				} else {
-					g.Logger.Info("player disconnected UDP", "player", i, "regID", g.registrations[i].regID, "address", g.gameData.playerAddresses[i])
+					g.Logger.Info("player disconnected UDP", "player", i, "regID", v.(*Registration).regID, "address", g.gameData.playerAddresses[i])
 					g.gameData.status |= (0x1 << (i + 1))
 
-					delete(g.registrations, i)
+					g.registrations.Delete(i)
 
-					g.PlayersMutex.Lock()
-					for k, v := range g.Players {
-						if v.Number == int(i) {
-							delete(g.Players, k)
+					g.Players.Range(func(k, v any) bool {
+						if v.(Client).Number == int(i) {
+							g.Players.Delete(k)
 							g.NeedsUpdatePlayers = true
 						}
-					}
-					g.PlayersMutex.Unlock()
+						return true
+					})
 					g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
 				}
 			}
 			g.gameData.playerAlive[i] = false
 		}
-		g.gameDataMutex.Unlock()
-		g.registrationsMutex.Unlock()
 
 		if !playersActive {
 			g.Logger.Info("no more players, closing room", "numPlayers", g.NumberOfPlayers, "clientSHA", g.ClientSha, "playTime", time.Since(g.StartTime).String())
@@ -209,4 +197,22 @@ func (g *GameServer) ManagePlayers() {
 		}
 		time.Sleep(time.Second * DisconnectTimeoutS)
 	}
+}
+
+func (g *GameServer) GetPlayersLength() int {
+	length := 0
+	g.Players.Range(func(_, _ any) bool {
+		length++
+		return true
+	})
+	return length
+}
+
+func (g *GameServer) GetRegistrationsLength() int {
+	length := 0
+	g.registrations.Range(func(_, _ any) bool {
+		length++
+		return true
+	})
+	return length
 }
