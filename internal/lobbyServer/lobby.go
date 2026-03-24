@@ -320,9 +320,10 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						if !v.Running {
 							v.Players.Delete(k)
 						} else {
-							newClient := w.(gameserver.Client)
-							newClient.InLobby = false
-							v.Players.Store(k, newClient)
+							if client, ok := w.(gameserver.Client); ok {
+								client.InLobby = false
+								v.Players.Store(k, client)
+							}
 						}
 						s.updatePlayers(v)
 					}
