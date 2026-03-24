@@ -434,6 +434,8 @@ func (g *GameServer) createTCPServer(basePort int, maxGames int) int {
 		if err == nil {
 			g.Port = basePort + i
 			g.Logger.Info("Created TCP server", "port", g.Port)
+			g.tcpFiles = make(map[string][]byte)
+			g.customData = make(map[byte][]byte)
 			g.tcpSettings = make([]byte, SettingsSize)
 			go g.watchTCP()
 			return g.Port
