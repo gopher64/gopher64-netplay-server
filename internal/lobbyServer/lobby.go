@@ -315,37 +315,31 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		err := ws.ReadJSON(&receivedMessage)
 		if err != nil {
 			for i, v := range s.gameServers {
-				v.PlayersMutex.Lock()
-				var disconnectKey string
+				v.PlayersMutex.Lock() // any player can modify this, which would be in a different thread
+				playerLeft := false
 				for k, w := range v.Players {
 					if w.Socket == ws {
-						disconnectKey = k
-						break
+						v.Logger.Info("Player has left lobby", "reason", err.Error(), "player", k, "address", ws.RemoteAddr())
+
+						if !v.Running {
+							delete(v.Players, k)
+						} else {
+							w.InLobby = false
+							v.Players[k] = w
+						}
+						playerLeft = true
 					}
-				}
-				if disconnectKey != "" {
-					v.Logger.Info("Player has left lobby", "reason", err.Error(), "player", disconnectKey, "address", ws.RemoteAddr())
-					w := v.Players[disconnectKey]
-					if !v.Running {
-						delete(v.Players, disconnectKey)
-					} else {
-						w.InLobby = false
-						v.Players[disconnectKey] = w
-					}
-					v.PlayersMutex.Unlock()
-					s.updatePlayers(v)
-				} else {
-					v.PlayersMutex.Unlock()
 				}
 				if !v.Running {
-					v.PlayersMutex.RLock()
-					emptyLobby := len(v.Players) == 0
-					v.PlayersMutex.RUnlock()
-					if emptyLobby {
+					if len(v.Players) == 0 {
 						v.Logger.Info("No more players in lobby, deleting")
 						v.CloseServers()
 						delete(s.gameServers, i)
 					}
+				}
+				v.PlayersMutex.Unlock()
+				if playerLeft {
+					s.updatePlayers(v)
 				}
 			}
 			// s.Logger.Info("closed WS connection", "address", ws.Request().RemoteAddr)
@@ -681,7 +675,6 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					g.StartTime = time.Now()
 					g.Logger.Info("starting game", "buffer_target", g.BufferTarget)
 					g.NumberOfPlayers = len(g.Players)
-
 					sendMessage.Accept = Accepted
 					go s.watchGameServer(roomName, g)
 					for _, v := range g.Players {
