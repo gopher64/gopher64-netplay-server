@@ -811,6 +811,7 @@ func (s *LobbyServer) LogServerStats() {
 		time.Sleep(time.Minute)
 	}
 }
+
 func getVersion() string {
 	version := "unknown"
 	if info, ok := debug.ReadBuildInfo(); ok {
