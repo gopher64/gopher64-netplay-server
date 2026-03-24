@@ -571,8 +571,8 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					var goodNumber bool
 					for number = range 4 {
 						goodNumber = true
-						for _, pl := range g.Players {
-							if pl.Number == number {
+						for _, v := range g.Players {
+							if v.Number == number {
 								goodNumber = false
 							}
 						}
@@ -676,8 +676,8 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					g.PlayersMutex.Lock()
 					if g.BufferTarget == 0 {
 						privateNetwork := true
-						for _, pl := range g.Players {
-							if !pl.IP.IsPrivate() {
+						for _, v := range g.Players {
+							if !v.IP.IsPrivate() {
 								privateNetwork = false
 							}
 						}
@@ -693,8 +693,8 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					g.Logger.Info("starting game", "buffer_target", g.BufferTarget)
 					g.NumberOfPlayers = len(g.Players)
 					var beginGameSockets []*websocket.Conn
-					for _, pl := range g.Players {
-						beginGameSockets = append(beginGameSockets, pl.Socket)
+					for _, v := range g.Players {
+						beginGameSockets = append(beginGameSockets, v.Socket)
 					}
 					g.PlayersMutex.Unlock()
 

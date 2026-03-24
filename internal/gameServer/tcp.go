@@ -301,6 +301,11 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 
 				response[0] = 1
 				g.Logger.Info("registered player", "registration", g.registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
+
+				g.gameDataMutex.Lock() // any player can modify this, which would be in a different thread
+				g.gameData.pendingInput[playerNumber] = InputData{0, plugin}
+				g.gameData.playerAlive[playerNumber] = true
+				g.gameDataMutex.Unlock()
 			} else {
 				if g.registrations[playerNumber].regID == regID {
 					g.Logger.Error(fmt.Errorf("re-registration"), "player already registered", "registration", g.registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
@@ -312,12 +317,6 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 			}
 			g.registrationsMutex.Unlock()
 
-			if !ok {
-				g.gameDataMutex.Lock()
-				g.gameData.pendingInput[playerNumber] = InputData{0, plugin}
-				g.gameData.playerAlive[playerNumber] = true
-				g.gameDataMutex.Unlock()
-			}
 			response[1] = uint8(g.BufferTarget)
 			_, err = conn.Write(response)
 			if err != nil {
@@ -352,8 +351,8 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 					delete(g.registrations, i)
 
 					g.PlayersMutex.Lock()
-					for k, pv := range g.Players {
-						if pv.Number == int(i) {
+					for k, v := range g.Players {
+						if v.Number == int(i) {
 							delete(g.Players, k)
 							g.NeedsUpdatePlayers = true
 						}
@@ -361,7 +360,6 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 					g.PlayersMutex.Unlock()
 
 					g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
-					break
 				}
 			}
 			g.gameDataMutex.Unlock()
