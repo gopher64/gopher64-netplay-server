@@ -148,8 +148,6 @@ func (g *GameServer) ManageBuffer() {
 				}
 			}
 		}
-		g.gameDataMutex.Unlock()
-
 		if leadPlayer > 0 {
 			if bufferHealth > float32(g.BufferTarget)+0.75 && g.gameData.bufferSize > 0 {
 				g.gameData.bufferSize--
@@ -159,6 +157,7 @@ func (g *GameServer) ManageBuffer() {
 				g.Logger.Info("increased buffer size", "bufferHealth", bufferHealth, "bufferSize", g.gameData.bufferSize, "leadPlayer", leadPlayer)
 			}
 		}
+		g.gameDataMutex.Unlock()
 
 		time.Sleep(time.Second)
 	}
@@ -170,7 +169,9 @@ func (g *GameServer) ManagePlayers() {
 		playersActive := false // used to check if anyone is still around
 		var i byte
 
-		g.gameDataMutex.Lock() // PlayerAlive and Status can be modified by processUDP in a different thread
+		// Lock registrations before gameData so TCP paths that take registrationsMutex then gameDataMutex cannot deadlock.
+		g.registrationsMutex.Lock()
+		g.gameDataMutex.Lock()
 		for i = range 4 {
 			_, ok := g.registrations[i]
 			if ok {
@@ -181,9 +182,7 @@ func (g *GameServer) ManagePlayers() {
 					g.Logger.Info("player disconnected UDP", "player", i, "regID", g.registrations[i].regID, "address", g.gameData.playerAddresses[i])
 					g.gameData.status |= (0x1 << (i + 1))
 
-					g.registrationsMutex.Lock() // Registrations can be modified by processTCP
 					delete(g.registrations, i)
-					g.registrationsMutex.Unlock()
 
 					for k, v := range g.Players {
 						if v.Number == int(i) {
@@ -199,6 +198,7 @@ func (g *GameServer) ManagePlayers() {
 			g.gameData.playerAlive[i] = false
 		}
 		g.gameDataMutex.Unlock()
+		g.registrationsMutex.Unlock()
 
 		if !playersActive {
 			g.Logger.Info("no more players, closing room", "numPlayers", g.NumberOfPlayers, "clientSHA", g.ClientSha, "playTime", time.Since(g.StartTime).String())

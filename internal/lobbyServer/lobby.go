@@ -198,6 +198,7 @@ func (s *LobbyServer) publishDiscord(message string, channel string) {
 	httpRequest, err := retryablehttp.NewRequest(http.MethodPost, channel, bodyJSON)
 	if err != nil {
 		s.Logger.Error(err, "could not create request")
+		return
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("User-Agent", "gopher64Bot (gopher64.github.io, 1)")
@@ -810,7 +811,6 @@ func (s *LobbyServer) LogServerStats() {
 		time.Sleep(time.Minute)
 	}
 }
-
 func getVersion() string {
 	version := "unknown"
 	if info, ok := debug.ReadBuildInfo(); ok {

@@ -339,13 +339,12 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 					if v.regID == regID {
 						g.Logger.Info("player disconnected TCP", "regID", regID, "player", i, "address", conn.RemoteAddr().String())
 
-						g.gameDataMutex.Lock() // any player can modify this, which would be in a different thread
+						// Same lock order as ManagePlayers / RegisterPlayer: registrationsMutex, then gameDataMutex.
+						g.registrationsMutex.Lock()
+						g.gameDataMutex.Lock()
 						g.gameData.playerAlive[i] = false
 						g.gameData.status |= (0x1 << (i + 1))
-
-						g.registrationsMutex.Lock() // any player can modify this, which would be in a different thread
 						delete(g.registrations, i)
-						g.registrationsMutex.Unlock()
 
 						for k, v := range g.Players {
 							if v.Number == int(i) {
@@ -357,6 +356,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 						}
 						g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
 						g.gameDataMutex.Unlock()
+						g.registrationsMutex.Unlock()
 					}
 				}
 			}
