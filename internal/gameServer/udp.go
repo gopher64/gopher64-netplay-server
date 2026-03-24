@@ -59,9 +59,9 @@ func uintLarger(v uint32, w uint32) bool {
 func (g *GameServer) getPlayerNumberByID(regID uint32) (byte, error) {
 	var i byte
 	for i = range 4 {
-		v, ok := g.registrations[i]
+		v, ok := g.registrations.Load(i)
 		if ok {
-			if v.regID == regID {
+			if v.(*Registration).regID == regID {
 				return i, nil
 			}
 		}
@@ -122,10 +122,11 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 }
 
 func (g *GameServer) processUDP(addr *net.UDPAddr) {
+	g.gameDataMutex.Lock()
+	defer g.gameDataMutex.Unlock()
 	playerNumber := g.gameData.recvBuffer[1]
 	switch g.gameData.recvBuffer[0] {
 	case KeyInfoClient:
-		g.gameDataMutex.Lock()
 		g.gameData.playerAddresses[playerNumber] = addr
 		count := binary.BigEndian.Uint32(g.gameData.recvBuffer[2:])
 
@@ -139,7 +140,6 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 				g.sendUDPInput(count, g.gameData.playerAddresses[i], playerNumber, true, NoRegID)
 			}
 		}
-		g.gameDataMutex.Unlock()
 	case PlayerInputRequest:
 		regID := binary.BigEndian.Uint32(g.gameData.recvBuffer[2:])
 		count := binary.BigEndian.Uint32(g.gameData.recvBuffer[6:])
@@ -149,14 +149,12 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 			g.Logger.Error(err, "could not process request", "regID", regID)
 			return
 		}
-		g.gameDataMutex.Lock() // playerAlive, countLag, bufferHealth, leadCount; other threads touch these
 		if uintLarger(count, g.gameData.leadCount) && spectator == 0 {
 			g.gameData.leadCount = count
 		}
 		g.gameData.countLag[sendingPlayerNumber] = append(g.gameData.countLag[sendingPlayerNumber], g.sendUDPInput(count, addr, playerNumber, spectator != 0, sendingPlayerNumber))
 		g.gameData.bufferHealth[sendingPlayerNumber] = append(g.gameData.bufferHealth[sendingPlayerNumber], g.gameData.recvBuffer[11])
 		g.gameData.playerAlive[sendingPlayerNumber] = true
-		g.gameDataMutex.Unlock()
 	case CP0Info:
 		if g.gameData.status&StatusDesync == 0 {
 			viCount := binary.BigEndian.Uint32(g.gameData.recvBuffer[1:])
@@ -164,9 +162,7 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 			if !ok {
 				g.gameData.syncValues.Add(viCount, bytes.Clone(g.gameData.recvBuffer[5:133]))
 			} else if !bytes.Equal(syncValue, g.gameData.recvBuffer[5:133]) {
-				g.gameDataMutex.Lock() // Status can be modified by ManagePlayers in a different thread
 				g.gameData.status |= StatusDesync
-				g.gameDataMutex.Unlock()
 
 				g.Logger.Error(fmt.Errorf("desync"), "game has desynced", "numPlayers", g.NumberOfPlayers, "clientSHA", g.ClientSha, "playTime", time.Since(g.StartTime).String(), "features", g.Features)
 			}
@@ -186,11 +182,12 @@ func (g *GameServer) watchUDP() {
 
 		if g.VerifyIP {
 			validated := false
-			for _, v := range g.Players {
-				if addr.IP.Equal(v.IP) {
+			g.Players.Range(func(k, v any) bool {
+				if addr.IP.Equal(v.(Client).IP) {
 					validated = true
 				}
-			}
+				return true
+			})
 			if !validated {
 				g.Logger.Error(fmt.Errorf("invalid udp connection"), "bad IP", "IP", addr.IP)
 				continue

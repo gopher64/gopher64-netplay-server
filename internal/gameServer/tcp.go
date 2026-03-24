@@ -117,7 +117,7 @@ func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 
 func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 	startTime := time.Now()
-	for len(g.Players) != len(g.registrations) {
+	for g.GetPlayersLength() != g.GetRegistrationsLength() {
 		time.Sleep(time.Millisecond)
 		if time.Since(startTime) > TCPTimeout {
 			g.Logger.Info("TCP connection timed out in tcpSendReg")
@@ -128,13 +128,13 @@ func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 	registrations := make([]byte, 24)
 	current := 0
 	for i = range 4 {
-		_, ok := g.registrations[i]
+		v, ok := g.registrations.Load(i)
 		if ok {
-			binary.BigEndian.PutUint32(registrations[current:], g.registrations[i].regID)
+			binary.BigEndian.PutUint32(registrations[current:], v.(*Registration).regID)
 			current += 4
-			registrations[current] = g.registrations[i].plugin
+			registrations[current] = v.(*Registration).plugin
 			current++
-			registrations[current] = g.registrations[i].raw
+			registrations[current] = v.(*Registration).raw
 			current++
 		} else {
 			current += 6
@@ -282,36 +282,35 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 			regID := binary.BigEndian.Uint32(regIDBytes)
 
 			response := make([]byte, 2)
-			_, ok := g.registrations[playerNumber]
+			v, ok := g.registrations.Load(playerNumber)
 			if !ok {
 				if playerNumber > 0 && plugin == 2 { // Only P1 can use mempak
 					plugin = 1
 				}
 
-				g.registrationsMutex.Lock() // any player can modify this, which would be in a different thread
-				g.registrations[playerNumber] = &Registration{
+				g.registrations.Store(playerNumber, &Registration{
 					regID:  regID,
 					plugin: plugin,
 					raw:    raw,
-				}
-				g.registrationsMutex.Unlock()
+				})
 
 				response[0] = 1
-				g.Logger.Info("registered player", "registration", g.registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
+				g.Logger.Info("registered player", "regID", regID, "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 
-				g.gameDataMutex.Lock() // any player can modify this, which would be in a different thread
+				g.gameDataMutex.Lock()
 				g.gameData.pendingInput[playerNumber] = InputData{0, plugin}
 				g.gameData.playerAlive[playerNumber] = true
 				g.gameDataMutex.Unlock()
 			} else {
-				if g.registrations[playerNumber].regID == regID {
-					g.Logger.Error(fmt.Errorf("re-registration"), "player already registered", "registration", g.registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
+				if v.(*Registration).regID == regID {
+					g.Logger.Error(fmt.Errorf("re-registration"), "player already registered", "registration", v.(*Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 					response[0] = 1
 				} else {
-					g.Logger.Error(fmt.Errorf("registration failure"), "could not register player", "registration", g.registrations[playerNumber], "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
+					g.Logger.Error(fmt.Errorf("registration failure"), "could not register player", "registration", v.(*Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 					response[0] = 0
 				}
 			}
+
 			response[1] = uint8(g.BufferTarget)
 			_, err = conn.Write(response)
 			if err != nil {
@@ -334,30 +333,27 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 			regID := binary.BigEndian.Uint32(regIDBytes)
 			var i byte
 			for i = range 4 {
-				v, ok := g.registrations[i]
-				if ok {
-					if v.regID == regID {
-						g.Logger.Info("player disconnected TCP", "regID", regID, "player", i, "address", conn.RemoteAddr().String())
+				v, ok := g.registrations.Load(i)
+				if ok && v.(*Registration).regID == regID {
+					g.Logger.Info("player disconnected TCP", "regID", regID, "player", i, "address", conn.RemoteAddr().String())
 
-						// Same lock order as ManagePlayers / RegisterPlayer: registrationsMutex, then gameDataMutex.
-						g.registrationsMutex.Lock()
-						g.gameDataMutex.Lock()
-						g.gameData.playerAlive[i] = false
-						g.gameData.status |= (0x1 << (i + 1))
-						delete(g.registrations, i)
+					g.gameDataMutex.Lock()
+					g.gameData.playerAlive[i] = false
+					g.gameData.status |= (0x1 << (i + 1))
+					g.gameDataMutex.Unlock()
+					g.registrations.Delete(i)
 
-						for k, v := range g.Players {
-							if v.Number == int(i) {
-								g.PlayersMutex.Lock()
-								delete(g.Players, k)
-								g.NeedsUpdatePlayers = true
-								g.PlayersMutex.Unlock()
-							}
+					g.Players.Range(func(k, v any) bool {
+						if v.(Client).Number == int(i) {
+							g.Players.Delete(k)
+							g.NeedsUpdatePlayers = true
 						}
-						g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
-						g.gameDataMutex.Unlock()
-						g.registrationsMutex.Unlock()
-					}
+						return true
+					})
+
+					g.gameDataMutex.Lock()
+					g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
+					g.gameDataMutex.Unlock()
 				}
 			}
 			tcpData.request = RequestNone
@@ -413,11 +409,12 @@ func (g *GameServer) watchTCP() {
 				conn.Close() //nolint:errcheck
 				continue
 			}
-			for _, v := range g.Players {
-				if remoteAddr.IP.Equal(v.IP) {
+			g.Players.Range(func(k, v any) bool {
+				if remoteAddr.IP.Equal(v.(Client).IP) {
 					validated = true
 				}
-			}
+				return true
+			})
 			if !validated {
 				g.Logger.Error(fmt.Errorf("invalid tcp connection"), "bad IP", "IP", conn.RemoteAddr().String())
 				conn.Close() //nolint:errcheck
@@ -440,7 +437,6 @@ func (g *GameServer) createTCPServer(basePort int, maxGames int) int {
 			g.tcpFiles = make(map[string][]byte)
 			g.customData = make(map[byte][]byte)
 			g.tcpSettings = make([]byte, SettingsSize)
-			g.registrations = map[byte]*Registration{}
 			go g.watchTCP()
 			return g.Port
 		}
