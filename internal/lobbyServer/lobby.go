@@ -335,6 +335,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						v.Logger.Info("No more players in lobby, deleting")
 						v.CloseServers()
 						delete(s.gameServers, i)
+						playerLeft = false // no need to update players
 					}
 				}
 				v.PlayersMutex.Unlock()
