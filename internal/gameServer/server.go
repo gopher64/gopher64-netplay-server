@@ -30,8 +30,9 @@ type GameServer struct {
 	tcpListener        *net.TCPListener
 	udpListener        *net.UDPConn
 	registrations      sync.Map
-	tcpFiles           sync.Map
-	customData         sync.Map
+	tcpMutex           sync.RWMutex
+	tcpFiles           map[string][]byte
+	customData         map[byte][]byte
 	Logger             logr.Logger
 	GameName           string
 	Password           string

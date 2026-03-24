@@ -42,8 +42,11 @@ const (
 func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize bool) {
 	startTime := time.Now()
 	var ok bool
+	var data []byte
 	for !ok {
-		data, ok := g.tcpFiles.Load(tcpData.filename)
+		g.tcpMutex.RLock()
+		data, ok = g.tcpFiles[tcpData.filename]
+		g.tcpMutex.RUnlock()
 		if !ok {
 			time.Sleep(time.Millisecond)
 			if time.Since(startTime) > TCPTimeout {
@@ -53,14 +56,14 @@ func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize b
 		} else {
 			if withSize {
 				size := make([]byte, 4)
-				binary.BigEndian.PutUint32(size, uint32(len(data.([]byte))))
+				binary.BigEndian.PutUint32(size, uint32(len(data)))
 				_, err := conn.Write(size)
 				if err != nil {
 					g.Logger.Error(err, "could not write size", "address", conn.RemoteAddr().String())
 				}
 			}
-			if len(data.([]byte)) > 0 {
-				_, err := conn.Write(data.([]byte))
+			if len(data) > 0 {
+				_, err := conn.Write(data)
 				if err != nil {
 					g.Logger.Error(err, "could not write file", "address", conn.RemoteAddr().String())
 				}
@@ -92,8 +95,11 @@ func (g *GameServer) tcpSendSettings(conn *net.TCPConn) {
 func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 	startTime := time.Now()
 	var ok bool
+	var data []byte
 	for !ok {
-		data, ok := g.customData.Load(customID)
+		g.tcpMutex.RLock()
+		data, ok = g.customData[customID]
+		g.tcpMutex.RUnlock()
 		if !ok {
 			time.Sleep(time.Millisecond)
 			if time.Since(startTime) > TCPTimeout {
@@ -101,7 +107,7 @@ func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 				return
 			}
 		} else {
-			_, err := conn.Write(data.([]byte))
+			_, err := conn.Write(data)
 			if err != nil {
 				g.Logger.Error(err, "could not write data", "address", conn.RemoteAddr().String())
 			}
@@ -202,7 +208,9 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 				tcpData.filesize = binary.BigEndian.Uint32(filesizeBytes)
 
 				if tcpData.filesize == 0 {
-					g.tcpFiles.Store(tcpData.filename, make([]byte, tcpData.filesize))
+					g.tcpMutex.Lock()
+					g.tcpFiles[tcpData.filename] = make([]byte, tcpData.filesize)
+					g.tcpMutex.Unlock()
 					tcpData.filename = ""
 					tcpData.filesize = 0
 					tcpData.request = RequestNone
@@ -212,9 +220,10 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 
 		if tcpData.request == RequestSendSave && tcpData.filename != "" && tcpData.filesize != 0 { // read in file from sender
 			if tcpData.buffer.Len() >= int(tcpData.filesize) {
-				g.tcpFiles.Store(tcpData.filename, make([]byte, tcpData.filesize))
-				data, _ := g.tcpFiles.Load(tcpData.filename)
-				_, err = tcpData.buffer.Read(data.([]byte))
+				g.tcpMutex.Lock()
+				g.tcpFiles[tcpData.filename] = make([]byte, tcpData.filesize)
+				_, err = tcpData.buffer.Read(g.tcpFiles[tcpData.filename])
+				g.tcpMutex.Unlock()
 				if err != nil {
 					g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 				}
@@ -362,9 +371,10 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 
 		if tcpData.request >= RequestSendCustomStart && tcpData.request < RequestSendCustomStart+CustomDataOffset && tcpData.customID != 0 { // read in custom data from sender
 			if tcpData.buffer.Len() >= int(tcpData.customDatasize) {
-				g.customData.Store(tcpData.customID, make([]byte, tcpData.customDatasize))
-				data, _ := g.customData.Load(tcpData.customID)
-				_, err = tcpData.buffer.Read(data.([]byte))
+				g.tcpMutex.Lock()
+				g.customData[tcpData.customID] = make([]byte, tcpData.customDatasize)
+				_, err = tcpData.buffer.Read(g.customData[tcpData.customID])
+				g.tcpMutex.Unlock()
 				if err != nil {
 					g.Logger.Error(err, "TCP error", "address", conn.RemoteAddr().String())
 				}
