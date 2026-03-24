@@ -130,9 +130,12 @@ func (s *LobbyServer) findGameServer(port int) (string, *gameserver.GameServer) 
 }
 
 func (s *LobbyServer) findRoomCreator(g *gameserver.GameServer) *gameserver.Client {
+	g.PlayersMutex.RLock()
+	defer g.PlayersMutex.RUnlock()
 	for _, v := range g.Players {
 		if v.Number == 0 {
-			return &v
+			c := v
+			return &c
 		}
 	}
 	return nil
@@ -145,18 +148,24 @@ func (s *LobbyServer) updatePlayers(g *gameserver.GameServer) {
 	var sendMessage SocketMessage
 	sendMessage.PlayerNames = make([]string, 4)
 	sendMessage.Type = TypeReplyPlayers
+
+	g.PlayersMutex.RLock()
 	for i, v := range g.Players {
 		if v.InLobby {
 			sendMessage.PlayerNames[v.Number] = i
 		}
 	}
-
-	// send the updated player list to all connected players
+	var lobbySockets []*websocket.Conn
 	for _, v := range g.Players {
 		if v.InLobby {
-			if err := s.sendData(v.Socket, sendMessage); err != nil {
-				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.Socket.RemoteAddr())
-			}
+			lobbySockets = append(lobbySockets, v.Socket)
+		}
+	}
+	g.PlayersMutex.RUnlock()
+
+	for _, sock := range lobbySockets {
+		if err := s.sendData(sock, sendMessage); err != nil {
+			s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", sock.RemoteAddr())
 		}
 	}
 }
@@ -174,12 +183,18 @@ func (s *LobbyServer) updateRoom(g *gameserver.GameServer, name string) {
 	sendMessage.Room.Protected = g.Password != ""
 	sendMessage.Type = TypeReplyEditRoom
 
-	// send the updated room to all connected players
+	g.PlayersMutex.RLock()
+	var editRoomSockets []*websocket.Conn
 	for _, v := range g.Players {
 		if v.InLobby {
-			if err := s.sendData(v.Socket, sendMessage); err != nil {
-				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.Socket.RemoteAddr())
-			}
+			editRoomSockets = append(editRoomSockets, v.Socket)
+		}
+	}
+	g.PlayersMutex.RUnlock()
+
+	for _, sock := range editRoomSockets {
+		if err := s.sendData(sock, sendMessage); err != nil {
+			s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", sock.RemoteAddr())
 		}
 	}
 }
@@ -307,24 +322,33 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		err := ws.ReadJSON(&receivedMessage)
 		if err != nil {
 			for i, v := range s.gameServers {
+				v.PlayersMutex.Lock()
+				var disconnectKey string
 				for k, w := range v.Players {
 					if w.Socket == ws {
-						v.Logger.Info("Player has left lobby", "reason", err.Error(), "player", k, "address", ws.RemoteAddr())
-
-						v.PlayersMutex.Lock() // any player can modify this, which would be in a different thread
-						if !v.Running {
-							delete(v.Players, k)
-						} else {
-							w.InLobby = false
-							v.Players[k] = w
-						}
-						v.PlayersMutex.Unlock()
-
-						s.updatePlayers(v)
+						disconnectKey = k
+						break
 					}
 				}
+				if disconnectKey != "" {
+					v.Logger.Info("Player has left lobby", "reason", err.Error(), "player", disconnectKey, "address", ws.RemoteAddr())
+					w := v.Players[disconnectKey]
+					if !v.Running {
+						delete(v.Players, disconnectKey)
+					} else {
+						w.InLobby = false
+						v.Players[disconnectKey] = w
+					}
+					v.PlayersMutex.Unlock()
+					s.updatePlayers(v)
+				} else {
+					v.PlayersMutex.Unlock()
+				}
 				if !v.Running {
-					if len(v.Players) == 0 {
+					v.PlayersMutex.RLock()
+					emptyLobby := len(v.Players) == 0
+					v.PlayersMutex.RUnlock()
+					if emptyLobby {
 						v.Logger.Info("No more players in lobby, deleting")
 						v.CloseServers()
 						delete(s.gameServers, i)
@@ -515,6 +539,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			sendMessage.Type = TypeReplyJoinRoom
 			roomName, g := s.findGameServer(receivedMessage.Room.Port)
 			if g != nil {
+				g.PlayersMutex.Lock()
 				for i := range g.Players {
 					if receivedMessage.PlayerName == i {
 						duplicateName = true
@@ -546,8 +571,8 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					var goodNumber bool
 					for number = range 4 {
 						goodNumber = true
-						for _, v := range g.Players {
-							if v.Number == number {
+						for _, pl := range g.Players {
+							if pl.Number == number {
 								goodNumber = false
 							}
 						}
@@ -560,14 +585,12 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					if err != nil {
 						g.Logger.Error(err, "could not parse IP", "IP", ws.RemoteAddr())
 					}
-					g.PlayersMutex.Lock() // any player can modify this from their own thread
 					g.Players[receivedMessage.PlayerName] = gameserver.Client{
 						IP:      net.ParseIP(ip),
 						Socket:  ws,
 						Number:  number,
 						InLobby: true,
 					}
-					g.PlayersMutex.Unlock()
 
 					g.Logger.Info("new player joining room", "player", receivedMessage.PlayerName, "playerIP", ws.RemoteAddr(), "number", number)
 					var sendRoom RoomData
@@ -580,6 +603,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					sendMessage.Room.Features = g.Features
 					sendMessage.Room.Port = g.Port
 				}
+				g.PlayersMutex.Unlock()
 			} else {
 				accepted = RoomDeleted
 				message = "room has been deleted"
@@ -610,11 +634,17 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			sendMessage.Message = fmt.Sprintf("%s: %s", receivedMessage.PlayerName, receivedMessage.Message)
 			_, g := s.findGameServer(receivedMessage.Room.Port)
 			if g != nil {
+				g.PlayersMutex.RLock()
+				var chatSockets []*websocket.Conn
 				for _, v := range g.Players {
 					if v.InLobby {
-						if err := s.sendData(v.Socket, sendMessage); err != nil {
-							s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
-						}
+						chatSockets = append(chatSockets, v.Socket)
+					}
+				}
+				g.PlayersMutex.RUnlock()
+				for _, sock := range chatSockets {
+					if err := s.sendData(sock, sendMessage); err != nil {
+						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", sock.RemoteAddr())
 					}
 				}
 			} else {
@@ -643,10 +673,11 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 					}
 				} else {
+					g.PlayersMutex.Lock()
 					if g.BufferTarget == 0 {
 						privateNetwork := true
-						for _, v := range g.Players {
-							if !v.IP.IsPrivate() {
+						for _, pl := range g.Players {
+							if !pl.IP.IsPrivate() {
 								privateNetwork = false
 							}
 						}
@@ -661,11 +692,17 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					g.StartTime = time.Now()
 					g.Logger.Info("starting game", "buffer_target", g.BufferTarget)
 					g.NumberOfPlayers = len(g.Players)
+					var beginGameSockets []*websocket.Conn
+					for _, pl := range g.Players {
+						beginGameSockets = append(beginGameSockets, pl.Socket)
+					}
+					g.PlayersMutex.Unlock()
+
 					sendMessage.Accept = Accepted
 					go s.watchGameServer(roomName, g)
-					for _, v := range g.Players {
-						if err := s.sendData(v.Socket, sendMessage); err != nil {
-							s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
+					for _, sock := range beginGameSockets {
+						if err := s.sendData(sock, sendMessage); err != nil {
+							s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", sock.RemoteAddr())
 						}
 					}
 				}

@@ -57,6 +57,8 @@ func uintLarger(v uint32, w uint32) bool {
 }
 
 func (g *GameServer) getPlayerNumberByID(regID uint32) (byte, error) {
+	g.registrationsMutex.RLock()
+	defer g.registrationsMutex.RUnlock()
 	var i byte
 	for i = range 4 {
 		v, ok := g.registrations[i]
@@ -186,11 +188,13 @@ func (g *GameServer) watchUDP() {
 
 		if g.VerifyIP {
 			validated := false
+			g.PlayersMutex.RLock()
 			for _, v := range g.Players {
 				if addr.IP.Equal(v.IP) {
 					validated = true
 				}
 			}
+			g.PlayersMutex.RUnlock()
 			if !validated {
 				g.Logger.Error(fmt.Errorf("invalid udp connection"), "bad IP", "IP", addr.IP)
 				continue

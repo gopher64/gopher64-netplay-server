@@ -27,11 +27,11 @@ type Registration struct {
 type GameServer struct {
 	StartTime          time.Time
 	Players            map[string]Client
-	PlayersMutex       sync.Mutex
+	PlayersMutex       sync.RWMutex
 	tcpListener        *net.TCPListener
 	udpListener        *net.UDPConn
 	registrations      map[byte]*Registration
-	registrationsMutex sync.Mutex
+	registrationsMutex sync.RWMutex
 	tcpMutex           sync.RWMutex
 	tcpFiles           map[string][]byte
 	customData         map[byte][]byte
@@ -185,14 +185,14 @@ func (g *GameServer) ManagePlayers() {
 
 					delete(g.registrations, i)
 
+					g.PlayersMutex.Lock()
 					for k, v := range g.Players {
 						if v.Number == int(i) {
-							g.PlayersMutex.Lock()
 							delete(g.Players, k)
 							g.NeedsUpdatePlayers = true
-							g.PlayersMutex.Unlock()
 						}
 					}
+					g.PlayersMutex.Unlock()
 					g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
 				}
 			}
