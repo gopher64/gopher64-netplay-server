@@ -40,6 +40,7 @@ type GameServer struct {
 	Emulator           string
 	tcpSettings        []byte
 	gameData           GameData
+	gameDataMutex      sync.Mutex
 	Port               int
 	hasSettings        bool
 	VerifyIP           bool
@@ -128,6 +129,7 @@ func (g *GameServer) ManageBuffer() {
 		var bufferHealth float32 = -1.0
 		var countLag float32 = 255
 		var leadPlayer int
+		g.gameDataMutex.Lock()
 		for i := range 4 {
 			var errBufferHeatlh error
 			var errCountLag error
@@ -153,6 +155,7 @@ func (g *GameServer) ManageBuffer() {
 				g.Logger.Info("increased buffer size", "bufferHealth", bufferHealth, "bufferSize", g.gameData.bufferSize, "leadPlayer", leadPlayer)
 			}
 		}
+		g.gameDataMutex.Unlock()
 
 		time.Sleep(time.Second)
 	}
@@ -164,6 +167,7 @@ func (g *GameServer) ManagePlayers() {
 		playersActive := false // used to check if anyone is still around
 		var i byte
 
+		g.gameDataMutex.Lock()
 		for i = range 4 {
 			v, ok := g.registrations.Load(i)
 			if ok {
@@ -188,6 +192,7 @@ func (g *GameServer) ManagePlayers() {
 			}
 			g.gameData.playerAlive[i] = false
 		}
+		g.gameDataMutex.Unlock()
 
 		if !playersActive {
 			g.Logger.Info("no more players, closing room", "numPlayers", g.NumberOfPlayers, "clientSHA", g.ClientSha, "playTime", time.Since(g.StartTime).String())

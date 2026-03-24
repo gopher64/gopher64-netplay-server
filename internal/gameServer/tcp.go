@@ -288,8 +288,10 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 				response[0] = 1
 				g.Logger.Info("registered player", "registration", v.(*Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 
+				g.gameDataMutex.Lock()
 				g.gameData.pendingInput[playerNumber] = InputData{0, plugin}
 				g.gameData.playerAlive[playerNumber] = true
+				g.gameDataMutex.Unlock()
 			} else {
 				if v.(*Registration).regID == regID {
 					g.Logger.Error(fmt.Errorf("re-registration"), "player already registered", "registration", v.(*Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
@@ -326,8 +328,10 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 				if ok && v.(*Registration).regID == regID {
 					g.Logger.Info("player disconnected TCP", "regID", regID, "player", i, "address", conn.RemoteAddr().String())
 
+					g.gameDataMutex.Lock()
 					g.gameData.playerAlive[i] = false
 					g.gameData.status |= (0x1 << (i + 1))
+					g.gameDataMutex.Unlock()
 					g.registrations.Delete(i)
 
 					g.Players.Range(func(k, v any) bool {
@@ -338,7 +342,9 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 						return true
 					})
 
+					g.gameDataMutex.Lock()
 					g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
+					g.gameDataMutex.Unlock()
 				}
 			}
 			tcpData.request = RequestNone

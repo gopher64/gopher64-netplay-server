@@ -122,6 +122,8 @@ func (g *GameServer) sendUDPInput(count uint32, addr *net.UDPAddr, playerNumber 
 }
 
 func (g *GameServer) processUDP(addr *net.UDPAddr) {
+	g.gameDataMutex.Lock()
+	defer g.gameDataMutex.Unlock()
 	playerNumber := g.gameData.recvBuffer[1]
 	switch g.gameData.recvBuffer[0] {
 	case KeyInfoClient:
