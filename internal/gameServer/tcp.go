@@ -295,7 +295,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 				})
 
 				response[0] = 1
-				g.Logger.Info("registered player", "registration", v.(*Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
+				g.Logger.Info("registered player", "regID", regID, "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 
 				g.gameDataMutex.Lock()
 				g.gameData.pendingInput[playerNumber] = InputData{0, plugin}
