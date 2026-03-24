@@ -125,6 +125,7 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 	playerNumber := g.gameData.recvBuffer[1]
 	switch g.gameData.recvBuffer[0] {
 	case KeyInfoClient:
+		g.gameDataMutex.Lock()
 		g.gameData.playerAddresses[playerNumber] = addr
 		count := binary.BigEndian.Uint32(g.gameData.recvBuffer[2:])
 
@@ -138,19 +139,20 @@ func (g *GameServer) processUDP(addr *net.UDPAddr) {
 				g.sendUDPInput(count, g.gameData.playerAddresses[i], playerNumber, true, NoRegID)
 			}
 		}
+		g.gameDataMutex.Unlock()
 	case PlayerInputRequest:
 		regID := binary.BigEndian.Uint32(g.gameData.recvBuffer[2:])
 		count := binary.BigEndian.Uint32(g.gameData.recvBuffer[6:])
 		spectator := g.gameData.recvBuffer[10]
-		if uintLarger(count, g.gameData.leadCount) && spectator == 0 {
-			g.gameData.leadCount = count
-		}
 		sendingPlayerNumber, err := g.getPlayerNumberByID(regID)
 		if err != nil {
 			g.Logger.Error(err, "could not process request", "regID", regID)
 			return
 		}
-		g.gameDataMutex.Lock() // playerAlive, countLag and bufferHealth can be modified in different threads
+		g.gameDataMutex.Lock() // playerAlive, countLag, bufferHealth, leadCount; other threads touch these
+		if uintLarger(count, g.gameData.leadCount) && spectator == 0 {
+			g.gameData.leadCount = count
+		}
 		g.gameData.countLag[sendingPlayerNumber] = append(g.gameData.countLag[sendingPlayerNumber], g.sendUDPInput(count, addr, playerNumber, spectator != 0, sendingPlayerNumber))
 		g.gameData.bufferHealth[sendingPlayerNumber] = append(g.gameData.bufferHealth[sendingPlayerNumber], g.gameData.recvBuffer[11])
 		g.gameData.playerAlive[sendingPlayerNumber] = true
