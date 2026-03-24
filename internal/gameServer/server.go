@@ -148,6 +148,7 @@ func (g *GameServer) ManageBuffer() {
 				}
 			}
 		}
+
 		if leadPlayer > 0 {
 			if bufferHealth > float32(g.BufferTarget)+0.75 && g.gameData.bufferSize > 0 {
 				g.gameData.bufferSize--
