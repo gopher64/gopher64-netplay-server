@@ -117,15 +117,11 @@ func (g *GameServer) tcpSendCustom(conn *net.TCPConn, customID byte) {
 
 func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 	startTime := time.Now()
-	for {
-		g.registrationsMutex.RLock()
-		g.PlayersMutex.RLock()
-		ready := len(g.Players) == len(g.registrations)
-		g.PlayersMutex.RUnlock()
-		g.registrationsMutex.RUnlock()
-		if ready {
-			break
-		}
+	g.registrationsMutex.RLock()
+	g.PlayersMutex.RLock()
+	defer g.registrationsMutex.RUnlock()
+	defer g.PlayersMutex.RUnlock()
+	for len(g.Players) != len(g.registrations) {
 		time.Sleep(time.Millisecond)
 		if time.Since(startTime) > TCPTimeout {
 			g.Logger.Info("TCP connection timed out in tcpSendReg")
@@ -135,7 +131,6 @@ func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 	var i byte
 	registrations := make([]byte, 24)
 	current := 0
-	g.registrationsMutex.RLock()
 	for i = range 4 {
 		_, ok := g.registrations[i]
 		if ok {
@@ -149,7 +144,6 @@ func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 			current += 6
 		}
 	}
-	g.registrationsMutex.RUnlock()
 	// g.Logger.Info("sent registration data", "address", conn.RemoteAddr().String())
 	_, err := conn.Write(registrations)
 	if err != nil {
