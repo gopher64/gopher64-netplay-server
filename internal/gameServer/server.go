@@ -13,10 +13,10 @@ import (
 )
 
 type Client struct {
-	Socket  *websocket.Conn
-	IP      net.IP
-	Number  int
-	InLobby bool
+	Socket      *websocket.Conn
+	IP          net.IP
+	Number      int
+	ClosedLobby atomic.Bool
 }
 
 type Registration struct {

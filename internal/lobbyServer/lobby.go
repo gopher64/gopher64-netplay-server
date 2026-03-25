@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -138,7 +139,7 @@ func (s *LobbyServer) updatePlayers(g *gameserver.GameServer) {
 	sendMessage.Type = TypeReplyPlayers
 
 	g.Players.Range(func(k, v any) bool {
-		if v.(*gameserver.Client).InLobby {
+		if !v.(*gameserver.Client).ClosedLobby.Load() {
 			sendMessage.PlayerNames[v.(*gameserver.Client).Number] = k.(string)
 		}
 		return true
@@ -146,7 +147,7 @@ func (s *LobbyServer) updatePlayers(g *gameserver.GameServer) {
 
 	// send the updated player list to all connected players
 	g.Players.Range(func(k, v any) bool {
-		if v.(*gameserver.Client).InLobby {
+		if !v.(*gameserver.Client).ClosedLobby.Load() {
 			if err := s.sendData(v.(*gameserver.Client).Socket, sendMessage); err != nil {
 				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.(*gameserver.Client).Socket.RemoteAddr())
 			}
@@ -170,7 +171,7 @@ func (s *LobbyServer) updateRoom(g *gameserver.GameServer, name string) {
 
 	// send the updated room to all connected players
 	g.Players.Range(func(k, v any) bool {
-		if v.(*gameserver.Client).InLobby {
+		if !v.(*gameserver.Client).ClosedLobby.Load() {
 			if err := s.sendData(v.(*gameserver.Client).Socket, sendMessage); err != nil {
 				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.(*gameserver.Client).Socket.RemoteAddr())
 			}
@@ -307,7 +308,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						if !v.Running {
 							v.Players.Delete(k)
 						} else {
-							w.(*gameserver.Client).InLobby = false
+							w.(*gameserver.Client).ClosedLobby.Store(true)
 						}
 						s.updatePlayers(v)
 						return false
@@ -389,10 +390,10 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						g.Logger.Error(err, "could not parse IP", "IP", ws.RemoteAddr())
 					}
 					g.Players.Store(receivedMessage.PlayerName, &gameserver.Client{
-						IP:      net.ParseIP(ip),
-						Number:  0,
-						Socket:  ws,
-						InLobby: true,
+						IP:          net.ParseIP(ip),
+						Number:      0,
+						Socket:      ws,
+						ClosedLobby: atomic.Bool{},
 					})
 					s.gameServers[receivedMessage.Room.RoomName] = &g
 					g.Logger.Info("Created new room", "port", g.Port, "creator", receivedMessage.PlayerName, "clientSHA", receivedMessage.ClientSha, "creatorIP", ws.RemoteAddr(), "buffer_target", g.BufferTarget, "features", receivedMessage.Room.Features)
@@ -556,10 +557,10 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						g.Logger.Error(err, "could not parse IP", "IP", ws.RemoteAddr())
 					}
 					g.Players.Store(receivedMessage.PlayerName, &gameserver.Client{
-						IP:      net.ParseIP(ip),
-						Socket:  ws,
-						Number:  number,
-						InLobby: true,
+						IP:          net.ParseIP(ip),
+						Socket:      ws,
+						Number:      number,
+						ClosedLobby: atomic.Bool{},
 					})
 
 					g.Logger.Info("new player joining room", "player", receivedMessage.PlayerName, "playerIP", ws.RemoteAddr(), "number", number)
@@ -604,7 +605,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			_, g := s.findGameServer(receivedMessage.Room.Port)
 			if g != nil {
 				g.Players.Range(func(k, v any) bool {
-					if v.(*gameserver.Client).InLobby {
+					if !v.(*gameserver.Client).ClosedLobby.Load() {
 						if err := s.sendData(v.(*gameserver.Client).Socket, sendMessage); err != nil {
 							s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 						}
