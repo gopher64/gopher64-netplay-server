@@ -227,7 +227,7 @@ func (s *LobbyServer) watchGameServer(name string, g *gameserver.GameServer) {
 	go g.ManageBuffer()
 	go g.ManagePlayers()
 	for {
-		if !g.Running {
+		if !g.Running.Load() {
 			g.Logger.Info("game server deleted", "port", g.Port)
 			delete(s.gameServers, name)
 			return
@@ -304,7 +304,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					if w.(gameserver.Client).Socket == ws {
 						v.Logger.Info("Player has left lobby", "reason", err.Error(), "player", k, "address", ws.RemoteAddr())
 
-						if !v.Running {
+						if !v.Running.Load() {
 							v.Players.Delete(k)
 						} else {
 							if client, ok := w.(gameserver.Client); ok {
@@ -318,7 +318,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						return true
 					}
 				})
-				if !v.Running {
+				if !v.Running.Load() {
 					if v.GetPlayersLength() == 0 {
 						v.Logger.Info("No more players in lobby, deleting")
 						v.CloseServers()
@@ -428,7 +428,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					if err := s.sendData(ws, sendMessage); err != nil {
 						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 					}
-				} else if g.Running {
+				} else if g.Running.Load() {
 					sendMessage.Accept = BadGameState
 					sendMessage.Message = "Game is already running"
 					if err := s.sendData(ws, sendMessage); err != nil {
@@ -466,7 +466,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 				authenticated = true
 				var rooms []RoomData
 				for i, v := range s.gameServers {
-					if v.Running {
+					if v.Running.Load() {
 						continue
 					}
 					if receivedMessage.Emulator != v.Emulator {
@@ -527,7 +527,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 				} else if g.GetPlayersLength() >= 4 {
 					accepted = RoomFull
 					message = "Room is full"
-				} else if g.Running {
+				} else if g.Running.Load() {
 					accepted = BadGameState
 					message = "Game already running"
 				} else if receivedMessage.PlayerName == "" {
@@ -631,7 +631,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					if err := s.sendData(ws, sendMessage); err != nil {
 						s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 					}
-				} else if g.Running {
+				} else if g.Running.Load() {
 					sendMessage.Accept = BadGameState
 					sendMessage.Message = "Game is already running"
 					if err := s.sendData(ws, sendMessage); err != nil {
@@ -655,7 +655,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 
-					g.Running = true
+					g.Running.Store(true)
 					g.StartTime = time.Now()
 					g.Logger.Info("starting game", "buffer_target", g.BufferTarget)
 					g.NumberOfPlayers = g.GetPlayersLength()

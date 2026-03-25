@@ -46,7 +46,7 @@ type GameServer struct {
 	Port               int
 	hasSettings        bool
 	VerifyIP           bool
-	Running            bool
+	Running            atomic.Bool
 	Features           map[string]string
 	NeedsUpdatePlayers atomic.Bool
 	NumberOfPlayers    int
@@ -123,7 +123,7 @@ func (g *GameServer) averageCountLag(playerNumber int) (float32, error) {
 
 func (g *GameServer) ManageBuffer() {
 	for {
-		if !g.Running {
+		if !g.Running.Load() {
 			g.Logger.Info("done managing buffers")
 			return
 		}
@@ -200,7 +200,7 @@ func (g *GameServer) ManagePlayers() {
 		if !playersActive {
 			g.Logger.Info("no more players, closing room", "numPlayers", g.NumberOfPlayers, "clientSHA", g.ClientSha, "playTime", time.Since(g.StartTime).String())
 			g.CloseServers()
-			g.Running = false
+			g.Running.Store(false)
 			return
 		}
 		time.Sleep(time.Second * DisconnectTimeoutS)
