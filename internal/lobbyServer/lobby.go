@@ -129,13 +129,11 @@ func (s *LobbyServer) findGameServer(port int) (string, *gameserver.GameServer) 
 	return "", nil
 }
 
-func (s *LobbyServer) findRoomCreator(g *gameserver.GameServer) *gameserver.Client {
-	var c *gameserver.Client
+func (s *LobbyServer) findRoomCreatorSocket(g *gameserver.GameServer) *websocket.Conn {
+	var c *websocket.Conn
 	g.Players.Range(func(k, v any) bool {
-		if client, ok := v.(gameserver.Client); ok {
-			if client.Number == 0 {
-				c = &client
-			}
+		if v.(*gameserver.Client).Number == 0 {
+			c = v.(*gameserver.Client).Socket
 		}
 		return true
 	})
@@ -151,17 +149,17 @@ func (s *LobbyServer) updatePlayers(g *gameserver.GameServer) {
 	sendMessage.Type = TypeReplyPlayers
 
 	g.Players.Range(func(k, v any) bool {
-		if v.(gameserver.Client).InLobby {
-			sendMessage.PlayerNames[v.(gameserver.Client).Number] = k.(string)
+		if v.(*gameserver.Client).InLobby {
+			sendMessage.PlayerNames[v.(*gameserver.Client).Number] = k.(string)
 		}
 		return true
 	})
 
 	// send the updated player list to all connected players
 	g.Players.Range(func(k, v any) bool {
-		if v.(gameserver.Client).InLobby {
-			if err := s.sendData(v.(gameserver.Client).Socket, sendMessage); err != nil {
-				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.(gameserver.Client).Socket.RemoteAddr())
+		if v.(*gameserver.Client).InLobby {
+			if err := s.sendData(v.(*gameserver.Client).Socket, sendMessage); err != nil {
+				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.(*gameserver.Client).Socket.RemoteAddr())
 			}
 		}
 		return true
@@ -183,9 +181,9 @@ func (s *LobbyServer) updateRoom(g *gameserver.GameServer, name string) {
 
 	// send the updated room to all connected players
 	g.Players.Range(func(k, v any) bool {
-		if v.(gameserver.Client).InLobby {
-			if err := s.sendData(v.(gameserver.Client).Socket, sendMessage); err != nil {
-				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.(gameserver.Client).Socket.RemoteAddr())
+		if v.(*gameserver.Client).InLobby {
+			if err := s.sendData(v.(*gameserver.Client).Socket, sendMessage); err != nil {
+				s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", v.(*gameserver.Client).Socket.RemoteAddr())
 			}
 		}
 		return true
@@ -314,16 +312,13 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			for i, v := range s.gameServers {
 				v.Players.Range(func(k, w any) bool {
-					if w.(gameserver.Client).Socket == ws {
+					if w.(*gameserver.Client).Socket == ws {
 						v.Logger.Info("Player has left lobby", "reason", err.Error(), "player", k, "address", ws.RemoteAddr())
 
 						if !v.Running {
 							v.Players.Delete(k)
 						} else {
-							if client, ok := w.(gameserver.Client); ok {
-								client.InLobby = false
-								v.Players.Store(k, client)
-							}
+							w.(*gameserver.Client).InLobby = false
 						}
 						s.updatePlayers(v)
 					}
@@ -402,7 +397,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					if err != nil {
 						g.Logger.Error(err, "could not parse IP", "IP", ws.RemoteAddr())
 					}
-					g.Players.Store(receivedMessage.PlayerName, gameserver.Client{
+					g.Players.Store(receivedMessage.PlayerName, &gameserver.Client{
 						IP:      net.ParseIP(ip),
 						Number:  0,
 						Socket:  ws,
@@ -433,9 +428,9 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			roomName, g := s.findGameServer(receivedMessage.Room.Port)
 
 			if g != nil {
-				roomCreator := s.findRoomCreator(g)
+				roomCreatorSocket := s.findRoomCreatorSocket(g)
 
-				if roomCreator.Socket != ws {
+				if roomCreatorSocket != ws {
 					sendMessage.Accept = BadPlayer
 					sendMessage.Message = "Player must be room creator"
 					if err := s.sendData(ws, sendMessage); err != nil {
@@ -553,7 +548,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					for number = range 4 {
 						goodNumber = true
 						g.Players.Range(func(k, v any) bool {
-							if v.(gameserver.Client).Number == number {
+							if v.(*gameserver.Client).Number == number {
 								goodNumber = false
 							}
 							return true
@@ -567,7 +562,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					if err != nil {
 						g.Logger.Error(err, "could not parse IP", "IP", ws.RemoteAddr())
 					}
-					g.Players.Store(receivedMessage.PlayerName, gameserver.Client{
+					g.Players.Store(receivedMessage.PlayerName, &gameserver.Client{
 						IP:      net.ParseIP(ip),
 						Socket:  ws,
 						Number:  number,
@@ -616,8 +611,8 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			_, g := s.findGameServer(receivedMessage.Room.Port)
 			if g != nil {
 				g.Players.Range(func(k, v any) bool {
-					if v.(gameserver.Client).InLobby {
-						if err := s.sendData(v.(gameserver.Client).Socket, sendMessage); err != nil {
+					if v.(*gameserver.Client).InLobby {
+						if err := s.sendData(v.(*gameserver.Client).Socket, sendMessage); err != nil {
 							s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 						}
 					}
@@ -634,9 +629,9 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			sendMessage.Type = TypeReplyBeginGame
 			roomName, g := s.findGameServer(receivedMessage.Room.Port)
 			if g != nil {
-				roomCreator := s.findRoomCreator(g)
+				roomCreatorSocket := s.findRoomCreatorSocket(g)
 
-				if roomCreator.Socket != ws {
+				if roomCreatorSocket != ws {
 					sendMessage.Accept = BadPlayer
 					sendMessage.Message = "Player must be room creator"
 					if err := s.sendData(ws, sendMessage); err != nil {
@@ -652,7 +647,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					if g.BufferTarget == 0 {
 						privateNetwork := true
 						g.Players.Range(func(k, v any) bool {
-							if !v.(gameserver.Client).IP.IsPrivate() {
+							if !v.(*gameserver.Client).IP.IsPrivate() {
 								privateNetwork = false
 							}
 							return true
@@ -671,7 +666,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					sendMessage.Accept = Accepted
 					go s.watchGameServer(roomName, g)
 					g.Players.Range(func(k, v any) bool {
-						if err := s.sendData(v.(gameserver.Client).Socket, sendMessage); err != nil {
+						if err := s.sendData(v.(*gameserver.Client).Socket, sendMessage); err != nil {
 							s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
 						}
 						return true
