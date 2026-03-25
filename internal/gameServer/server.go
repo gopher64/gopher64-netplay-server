@@ -182,7 +182,7 @@ func (g *GameServer) ManagePlayers() {
 					g.registrations.Delete(i)
 
 					g.Players.Range(func(k, v any) bool {
-						if v.(*Client).Number == int(i) {
+						if v.(Client).Number == int(i) {
 							g.Players.Delete(k)
 							g.NeedsUpdatePlayers.Store(true)
 							return false
@@ -210,7 +210,7 @@ func (g *GameServer) ManagePlayers() {
 func (g *GameServer) IsRoomCreator(socket *websocket.Conn) bool {
 	roomCreator := false
 	g.Players.Range(func(k, v any) bool {
-		if v.(*Client).Number == 0 && v.(*Client).Socket == socket {
+		if v.(Client).Number == 0 && v.(Client).Socket == socket {
 			roomCreator = true
 			return false
 		} else {
