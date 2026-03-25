@@ -186,8 +186,10 @@ func (g *GameServer) ManagePlayers() {
 						if v.(Client).Number == int(i) {
 							g.Players.Delete(k)
 							g.NeedsUpdatePlayers.Store(true)
+							return false
+						} else {
+							return true
 						}
-						return true
 					})
 					g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
 				}
@@ -211,8 +213,10 @@ func (g *GameServer) IsRoomCreator(socket *websocket.Conn) bool {
 	g.Players.Range(func(k, v any) bool {
 		if v.(*Client).Number == 0 && v.(*Client).Socket == socket {
 			roomCreator = true
+			return false
+		} else {
+			return true
 		}
-		return true
 	})
 	return roomCreator
 }

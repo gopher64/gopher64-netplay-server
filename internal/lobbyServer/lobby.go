@@ -310,8 +310,10 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 							w.(*gameserver.Client).InLobby = false
 						}
 						s.updatePlayers(v)
+						return false
+					} else {
+						return true
 					}
-					return true
 				})
 				if !v.Running {
 					if v.GetPlayersLength() == 0 {
@@ -505,8 +507,10 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 				g.Players.Range(func(k, i any) bool {
 					if receivedMessage.PlayerName == k {
 						duplicateName = true
+						return false
+					} else {
+						return true
 					}
-					return true
 				})
 				if g.Password != "" && g.Password != receivedMessage.Room.Password {
 					accepted = BadPassword
@@ -537,8 +541,10 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						g.Players.Range(func(k, v any) bool {
 							if v.(*gameserver.Client).Number == number {
 								goodNumber = false
+								return false
+							} else {
+								return true
 							}
-							return true
 						})
 						if goodNumber {
 							break
@@ -634,8 +640,10 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 						g.Players.Range(func(k, v any) bool {
 							if !v.(*gameserver.Client).IP.IsPrivate() {
 								privateNetwork = false
+								return false
+							} else {
+								return true
 							}
-							return true
 						})
 						if privateNetwork {
 							g.BufferTarget = 1

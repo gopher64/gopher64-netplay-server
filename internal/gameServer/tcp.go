@@ -346,8 +346,10 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 						if v.(Client).Number == int(i) {
 							g.Players.Delete(k)
 							g.NeedsUpdatePlayers.Store(true)
+							return false
+						} else {
+							return true
 						}
-						return true
 					})
 
 					g.gameData.bufferHealth[i] = g.gameData.bufferHealth[i][:0]
@@ -410,8 +412,11 @@ func (g *GameServer) watchTCP() {
 			g.Players.Range(func(k, v any) bool {
 				if remoteAddr.IP.Equal(v.(Client).IP) {
 					validated = true
+					return false
+				} else {
+					return true
 				}
-				return true
+
 			})
 			if !validated {
 				g.Logger.Error(fmt.Errorf("invalid tcp connection"), "bad IP", "IP", conn.RemoteAddr().String())

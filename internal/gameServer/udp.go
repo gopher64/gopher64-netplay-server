@@ -185,8 +185,10 @@ func (g *GameServer) watchUDP() {
 			g.Players.Range(func(k, v any) bool {
 				if addr.IP.Equal(v.(Client).IP) {
 					validated = true
+					return false
+				} else {
+					return true
 				}
-				return true
 			})
 			if !validated {
 				g.Logger.Error(fmt.Errorf("invalid udp connection"), "bad IP", "IP", addr.IP)
