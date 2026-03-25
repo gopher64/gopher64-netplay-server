@@ -183,7 +183,7 @@ func (g *GameServer) ManagePlayers() {
 					g.registrations.Delete(i)
 
 					g.Players.Range(func(k, v any) bool {
-						if v.(Client).Number == int(i) {
+						if v.(*Client).Number == int(i) {
 							g.Players.Delete(k)
 							g.NeedsUpdatePlayers.Store(true)
 							return false

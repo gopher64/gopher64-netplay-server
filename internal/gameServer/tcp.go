@@ -343,7 +343,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 					g.registrations.Delete(i)
 
 					g.Players.Range(func(k, v any) bool {
-						if v.(Client).Number == int(i) {
+						if v.(*Client).Number == int(i) {
 							g.Players.Delete(k)
 							g.NeedsUpdatePlayers.Store(true)
 							return false
@@ -410,7 +410,7 @@ func (g *GameServer) watchTCP() {
 				continue
 			}
 			g.Players.Range(func(k, v any) bool {
-				if remoteAddr.IP.Equal(v.(Client).IP) {
+				if remoteAddr.IP.Equal(v.(*Client).IP) {
 					validated = true
 					return false
 				} else {
