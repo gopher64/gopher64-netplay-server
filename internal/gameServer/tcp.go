@@ -128,12 +128,12 @@ func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 	registrations := make([]byte, 24)
 	current := 0
 	for i = range 4 {
-		if v, ok := g.registrations.Load(i); ok {
-			binary.BigEndian.PutUint32(registrations[current:], v.(Registration).regID)
+		if reg, ok := g.registrations.Load(i); ok {
+			binary.BigEndian.PutUint32(registrations[current:], reg.(Registration).regID)
 			current += 4
-			registrations[current] = v.(Registration).plugin
+			registrations[current] = reg.(Registration).plugin
 			current++
-			registrations[current] = v.(Registration).raw
+			registrations[current] = reg.(Registration).raw
 			current++
 		} else {
 			current += 6
@@ -281,12 +281,12 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 			regID := binary.BigEndian.Uint32(regIDBytes)
 
 			response := make([]byte, 2)
-			if v, ok := g.registrations.Load(playerNumber); ok {
-				if v.(Registration).regID == regID {
-					g.Logger.Error(fmt.Errorf("re-registration"), "player already registered", "registration", v.(Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
+			if reg, ok := g.registrations.Load(playerNumber); ok {
+				if reg.(Registration).regID == regID {
+					g.Logger.Error(fmt.Errorf("re-registration"), "player already registered", "registration", reg.(Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 					response[0] = 1
 				} else {
-					g.Logger.Error(fmt.Errorf("registration failure"), "could not register player", "registration", v.(Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
+					g.Logger.Error(fmt.Errorf("registration failure"), "could not register player", "registration", reg.(Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 					response[0] = 0
 				}
 			} else {
@@ -331,8 +331,8 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 			regID := binary.BigEndian.Uint32(regIDBytes)
 			var i byte
 			for i = range 4 {
-				if v, ok := g.registrations.Load(i); ok {
-					if v.(Registration).regID == regID {
+				if reg, ok := g.registrations.Load(i); ok {
+					if reg.(Registration).regID == regID {
 						g.Logger.Info("player disconnected TCP", "regID", regID, "player", i, "address", conn.RemoteAddr().String())
 
 						g.gameDataMutex.Lock()
