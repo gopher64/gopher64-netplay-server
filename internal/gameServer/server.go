@@ -13,10 +13,10 @@ import (
 )
 
 type Client struct {
-	Socket      *websocket.Conn
-	IP          net.IP
-	Number      int
-	ClosedLobby atomic.Bool
+	Socket  *websocket.Conn
+	IP      net.IP
+	Number  int
+	InLobby bool
 }
 
 type Registration struct {
@@ -173,10 +173,10 @@ func (g *GameServer) ManagePlayers() {
 		for i = range 4 {
 			if v, ok := g.registrations.Load(i); ok {
 				if g.gameData.playerAlive[i] {
-					g.Logger.Info("player status", "player", i, "regID", v.(*Registration).regID, "bufferHealth", g.gameData.averageBufferHealth[i], "bufferSize", g.gameData.bufferSize, "countLag", g.gameData.averageCountLag[i], "address", g.gameData.playerAddresses[i])
+					g.Logger.Info("player status", "player", i, "regID", v.(Registration).regID, "bufferHealth", g.gameData.averageBufferHealth[i], "bufferSize", g.gameData.bufferSize, "countLag", g.gameData.averageCountLag[i], "address", g.gameData.playerAddresses[i])
 					playersActive = true
 				} else {
-					g.Logger.Info("player disconnected UDP", "player", i, "regID", v.(*Registration).regID, "address", g.gameData.playerAddresses[i])
+					g.Logger.Info("player disconnected UDP", "player", i, "regID", v.(Registration).regID, "address", g.gameData.playerAddresses[i])
 					g.gameData.status |= (0x1 << (i + 1))
 
 					g.registrations.Delete(i)

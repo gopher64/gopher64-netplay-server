@@ -60,7 +60,7 @@ func (g *GameServer) getPlayerNumberByID(regID uint32) (byte, error) {
 	var i byte
 	for i = range 4 {
 		if v, ok := g.registrations.Load(i); ok {
-			if v.(*Registration).regID == regID {
+			if v.(Registration).regID == regID {
 				return i, nil
 			}
 		}

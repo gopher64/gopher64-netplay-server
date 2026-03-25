@@ -129,11 +129,11 @@ func (g *GameServer) tcpSendReg(conn *net.TCPConn) {
 	current := 0
 	for i = range 4 {
 		if v, ok := g.registrations.Load(i); ok {
-			binary.BigEndian.PutUint32(registrations[current:], v.(*Registration).regID)
+			binary.BigEndian.PutUint32(registrations[current:], v.(Registration).regID)
 			current += 4
-			registrations[current] = v.(*Registration).plugin
+			registrations[current] = v.(Registration).plugin
 			current++
-			registrations[current] = v.(*Registration).raw
+			registrations[current] = v.(Registration).raw
 			current++
 		} else {
 			current += 6
@@ -282,11 +282,11 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 
 			response := make([]byte, 2)
 			if v, ok := g.registrations.Load(playerNumber); ok {
-				if v.(*Registration).regID == regID {
-					g.Logger.Error(fmt.Errorf("re-registration"), "player already registered", "registration", v.(*Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
+				if v.(Registration).regID == regID {
+					g.Logger.Error(fmt.Errorf("re-registration"), "player already registered", "registration", v.(Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 					response[0] = 1
 				} else {
-					g.Logger.Error(fmt.Errorf("registration failure"), "could not register player", "registration", v.(*Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
+					g.Logger.Error(fmt.Errorf("registration failure"), "could not register player", "registration", v.(Registration), "number", playerNumber, "bufferLeft", tcpData.buffer.Len(), "address", conn.RemoteAddr().String())
 					response[0] = 0
 				}
 			} else {
@@ -294,7 +294,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 					plugin = 1
 				}
 
-				g.registrations.Store(playerNumber, &Registration{
+				g.registrations.Store(playerNumber, Registration{
 					regID:  regID,
 					plugin: plugin,
 					raw:    raw,
@@ -332,7 +332,7 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 			var i byte
 			for i = range 4 {
 				if v, ok := g.registrations.Load(i); ok {
-					if v.(*Registration).regID == regID {
+					if v.(Registration).regID == regID {
 						g.Logger.Info("player disconnected TCP", "regID", regID, "player", i, "address", conn.RemoteAddr().String())
 
 						g.gameDataMutex.Lock()
