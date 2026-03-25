@@ -181,8 +181,8 @@ func (g *GameServer) watchUDP() {
 
 		if g.VerifyIP {
 			validated := false
-			g.Players.Range(func(_, v any) bool {
-				if addr.IP.Equal(v.(Client).IP) {
+			g.Players.Range(func(_, pl any) bool {
+				if addr.IP.Equal(pl.(Client).IP) {
 					validated = true
 					return false
 				} else {
