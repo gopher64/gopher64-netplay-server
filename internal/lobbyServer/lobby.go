@@ -391,7 +391,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					if err != nil {
 						g.Logger.Error(err, "could not parse IP", "IP", ws.RemoteAddr())
 					}
-					g.Players.Store(receivedMessage.PlayerName, &gameserver.Client{
+					g.Players.Store(receivedMessage.PlayerName, gameserver.Client{
 						IP:      net.ParseIP(ip),
 						Number:  0,
 						Socket:  ws,
@@ -558,7 +558,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 					if err != nil {
 						g.Logger.Error(err, "could not parse IP", "IP", ws.RemoteAddr())
 					}
-					g.Players.Store(receivedMessage.PlayerName, &gameserver.Client{
+					g.Players.Store(receivedMessage.PlayerName, gameserver.Client{
 						IP:      net.ParseIP(ip),
 						Socket:  ws,
 						Number:  number,
