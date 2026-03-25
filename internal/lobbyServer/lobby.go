@@ -129,17 +129,6 @@ func (s *LobbyServer) findGameServer(port int) (string, *gameserver.GameServer) 
 	return "", nil
 }
 
-func (s *LobbyServer) findRoomCreatorSocket(g *gameserver.GameServer) *websocket.Conn {
-	var c *websocket.Conn
-	g.Players.Range(func(k, v any) bool {
-		if v.(*gameserver.Client).Number == 0 {
-			c = v.(*gameserver.Client).Socket
-		}
-		return true
-	})
-	return c
-}
-
 func (s *LobbyServer) updatePlayers(g *gameserver.GameServer) {
 	if g == nil {
 		return
@@ -428,9 +417,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			roomName, g := s.findGameServer(receivedMessage.Room.Port)
 
 			if g != nil {
-				roomCreatorSocket := s.findRoomCreatorSocket(g)
-
-				if roomCreatorSocket != ws {
+				if !g.IsRoomCreator(ws) {
 					sendMessage.Accept = BadPlayer
 					sendMessage.Message = "Player must be room creator"
 					if err := s.sendData(ws, sendMessage); err != nil {
@@ -629,9 +616,7 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			sendMessage.Type = TypeReplyBeginGame
 			roomName, g := s.findGameServer(receivedMessage.Room.Port)
 			if g != nil {
-				roomCreatorSocket := s.findRoomCreatorSocket(g)
-
-				if roomCreatorSocket != ws {
+				if !g.IsRoomCreator(ws) {
 					sendMessage.Accept = BadPlayer
 					sendMessage.Message = "Player must be room creator"
 					if err := s.sendData(ws, sendMessage); err != nil {

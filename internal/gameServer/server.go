@@ -206,6 +206,17 @@ func (g *GameServer) ManagePlayers() {
 	}
 }
 
+func (g *GameServer) IsRoomCreator(socket *websocket.Conn) bool {
+	roomCreator := false
+	g.Players.Range(func(k, v any) bool {
+		if v.(*Client).Number == 0 && v.(*Client).Socket == socket {
+			roomCreator = true
+		}
+		return true
+	})
+	return roomCreator
+}
+
 func (g *GameServer) GetPlayersLength() int {
 	length := 0
 	g.Players.Range(func(_, _ any) bool {
