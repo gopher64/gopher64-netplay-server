@@ -171,8 +171,7 @@ func (g *GameServer) ManagePlayers() {
 
 		g.gameDataMutex.Lock()
 		for i = range 4 {
-			v, ok := g.registrations.Load(i)
-			if ok {
+			if v, ok := g.registrations.Load(i); ok {
 				if g.gameData.playerAlive[i] {
 					g.Logger.Info("player status", "player", i, "regID", v.(*Registration).regID, "bufferHealth", g.gameData.averageBufferHealth[i], "bufferSize", g.gameData.bufferSize, "countLag", g.gameData.averageCountLag[i], "address", g.gameData.playerAddresses[i])
 					playersActive = true

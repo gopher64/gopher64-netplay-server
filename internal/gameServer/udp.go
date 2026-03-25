@@ -59,8 +59,7 @@ func uintLarger(v uint32, w uint32) bool {
 func (g *GameServer) getPlayerNumberByID(regID uint32) (byte, error) {
 	var i byte
 	for i = range 4 {
-		v, ok := g.registrations.Load(i)
-		if ok {
+		if v, ok := g.registrations.Load(i); ok {
 			if v.(*Registration).regID == regID {
 				return i, nil
 			}
