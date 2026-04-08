@@ -1,6 +1,6 @@
 module github.com/gopher64/gopher64-netplay-server
 
-go 1.25.8
+go 1.26.2
 
 require (
 	github.com/go-logr/zapr v1.3.0
@@ -13,7 +13,7 @@ require (
 
 require (
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
 )
 
 require (
