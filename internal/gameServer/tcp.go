@@ -39,13 +39,13 @@ const (
 	CustomDataOffset           = 64
 )
 
-func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize bool) {
+func (g *GameServer) tcpSendFile(conn *net.TCPConn, filename string, withSize bool) {
 	startTime := time.Now()
 	var ok bool
 	var data []byte
 	for !ok {
 		g.tcpMutex.RLock()
-		data, ok = g.tcpFiles[tcpData.filename]
+		data, ok = g.tcpFiles[filename]
 		g.tcpMutex.RUnlock()
 		if !ok {
 			time.Sleep(time.Millisecond)
@@ -68,10 +68,6 @@ func (g *GameServer) tcpSendFile(tcpData *TCPData, conn *net.TCPConn, withSize b
 					g.Logger.Error(err, "could not write file", "address", conn.RemoteAddr().String())
 				}
 			}
-
-			// g.Logger.Info("sent save file", "filename", tcpData.filename, "filesize", tcpData.filesize, "address", conn.RemoteAddr().String())
-			tcpData.filename = ""
-			tcpData.filesize = 0
 		}
 	}
 }
@@ -234,13 +230,19 @@ func (g *GameServer) processTCP(conn *net.TCPConn) {
 		}
 
 		if tcpData.request == RequestReceiveSave && tcpData.filename != "" { // send requested file
-			go g.tcpSendFile(tcpData, conn, false)
+			filename := tcpData.filename
+			tcpData.filename = ""
+			tcpData.filesize = 0
 			tcpData.request = RequestNone
+			go g.tcpSendFile(conn, filename, false)
 		}
 
 		if tcpData.request == RequestReceiveSaveWithSize && tcpData.filename != "" { // send requested file
-			go g.tcpSendFile(tcpData, conn, true)
+			filename := tcpData.filename
+			tcpData.filename = ""
+			tcpData.filesize = 0
 			tcpData.request = RequestNone
+			go g.tcpSendFile(conn, filename, true)
 		}
 
 		if tcpData.request == RequestSendSettings { // get settings from P1
