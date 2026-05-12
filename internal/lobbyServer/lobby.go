@@ -336,6 +336,14 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 
 		if receivedMessage.Type == TypeRequestCreateRoom {
 			sendMessage.Type = TypeReplyCreateRoom
+			if receivedMessage.Room == nil {
+				sendMessage.Accept = BadRoomName
+				sendMessage.Message = "Room data is required"
+				if err := s.sendData(ws, sendMessage); err != nil {
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
+				}
+				continue
+			}
 			_, exists := s.gameServers[receivedMessage.Room.RoomName]
 			if exists {
 				sendMessage.Accept = DuplicateName
@@ -419,6 +427,14 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			sendMessage.Type = TypeReplyEditRoom
+			if receivedMessage.Room == nil {
+				sendMessage.Accept = BadRoomName
+				sendMessage.Message = "Room data is required"
+				if err := s.sendData(ws, sendMessage); err != nil {
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
+				}
+				continue
+			}
 			roomName, g := s.findGameServer(receivedMessage.Room.Port)
 
 			if g != nil {
@@ -505,6 +521,16 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			var accepted int
 			var message string
 			sendMessage.Type = TypeReplyJoinRoom
+			if receivedMessage.Room == nil {
+				accepted = BadRoomName
+				message = "Room data is required"
+				sendMessage.Accept = accepted
+				sendMessage.Message = message
+				if err := s.sendData(ws, sendMessage); err != nil {
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
+				}
+				continue
+			}
 			roomName, g := s.findGameServer(receivedMessage.Room.Port)
 			if g != nil {
 				g.Players.Range(func(k, _ any) bool {
@@ -591,6 +617,10 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to request players without being authenticated", "address", ws.RemoteAddr())
 				continue
 			}
+			if receivedMessage.Room == nil {
+				s.Logger.Error(fmt.Errorf("missing room"), "request_players without room", "address", ws.RemoteAddr())
+				continue
+			}
 			_, g := s.findGameServer(receivedMessage.Room.Port)
 			if g != nil {
 				s.updatePlayers(g)
@@ -600,6 +630,10 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		} else if receivedMessage.Type == TypeRequestChatMessage {
 			if !authenticated {
 				s.Logger.Error(fmt.Errorf("bad auth"), "User tried to send a chat message without being authenticated", "address", ws.RemoteAddr())
+				continue
+			}
+			if receivedMessage.Room == nil {
+				s.Logger.Error(fmt.Errorf("missing room"), "chat message without room", "address", ws.RemoteAddr())
 				continue
 			}
 			sendMessage.Type = TypeReplyChatMessage
@@ -623,6 +657,14 @@ func (s *LobbyServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			sendMessage.Type = TypeReplyBeginGame
+			if receivedMessage.Room == nil {
+				sendMessage.Accept = BadRoomName
+				sendMessage.Message = "Room data is required"
+				if err := s.sendData(ws, sendMessage); err != nil {
+					s.Logger.Error(err, "failed to send message", "message", sendMessage, "address", ws.RemoteAddr())
+				}
+				continue
+			}
 			roomName, g := s.findGameServer(receivedMessage.Room.Port)
 			if g != nil {
 				if !g.IsRoomCreator(ws) {
