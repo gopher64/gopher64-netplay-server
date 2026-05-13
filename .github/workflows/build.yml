@@ -1,12 +1,14 @@
 name: Build project
 
 permissions:
-  contents: read
+  contents: write
 
 on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   pull_request:
   merge_group:
 
@@ -36,3 +38,10 @@ jobs:
         with:
           name: gopher64-netplay-server
           path: gopher64-netplay-server*
+
+      - name: Add files to release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          files: gopher64-netplay-server*
