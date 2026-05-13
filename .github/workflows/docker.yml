@@ -1,14 +1,14 @@
-name: Release project
-
-on:
-  release:
-    types: [published]
-  push:
-    branches:
-      - main
+name: Publish docker
 
 permissions:
   contents: read
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
 
 env:
   REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
@@ -16,7 +16,7 @@ env:
   REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
 
 jobs:
-  release-linux:
+  publish-docker:
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     runs-on: ubuntu-latest
@@ -42,6 +42,6 @@ jobs:
           podman manifest push netplay docker://quay.io/gopher64/gopher64-netplay-server:${{ github.ref_name }}
 
       - name: Push latest tag
-        if: ${{ github.event_name == 'release' }}
+        if: github.ref_type == 'tag'
         run: |
           podman manifest push netplay docker://quay.io/gopher64/gopher64-netplay-server:latest
